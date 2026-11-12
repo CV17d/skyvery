@@ -89,22 +89,44 @@ python -m pytest -q tests
 - **Oskar**: `location_update` (conditional write, geohash, broadcast filtrado, limpieza `410 Gone`), simulador y pruebas.
 - **Sebas**: NGINX con rate limiting, `user-data.sh`, guía EC2/ALB, página de seguimiento, panel de operaciones y `loadtest/carga.py`.
 
-### Etapa 2 — Despliegue, pruebas reales y evidencias (pendiente)
+### Etapa 2 — Despliegue, pruebas reales y evidencias (en curso)
+
+#### Stack desplegado (`skyvery-prod`, us-east-1)
+
+| Recurso | URL / valor |
+|---|---|
+| WebSocket (`WebSocketUrl`) | `wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod` |
+| API REST (`OrdersApiUrl`) | `https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod` |
+| Página de seguimiento (`FrontendUrl`) | `http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com` (vacía hasta que Sebas suba el `index.html`) |
+| Tema SNS | `skyvery-delivery-completed-prod` |
+
+Datos de prueba ya creados: repartidor `DRV-1`; órdenes `ORD-A` (zona `centro`, ya `DELIVERED`) y `ORD-B` (zona `norte`, `PENDING`).
+Para sus pruebas creen órdenes nuevas, por ejemplo:
+
+```bash
+curl -X POST https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod/orders -H "Content-Type: application/json" -d '{"orderId":"ORD-10","zone":"centro","driverId":"DRV-1"}'
+```
+
+- **Simulador y `wscat`** no necesitan cuenta de AWS, solo la URL del WebSocket.
+- **EC2, ALB, S3 y CloudWatch** requieren acceso a la cuenta: pídanle a Cristian un usuario de IAM o háganlo junto con él.
+- Al terminar la demo: `sam delete --stack-name skyvery-prod --profile skyvery` y terminar la EC2 y el ALB.
 
 Cada evidencia (captura o log) se guarda en `docs/evidencias/` con un nombre claro.
 
 **Cristian**
-- [ ] `sam build` + `sam deploy --guided -t infra/template.yaml` (stage `prod`) y compartir con el grupo las salidas: `WebSocketUrl`, `OrdersApiUrl`, `FrontendUrl`.
+- [x] `sam deploy` del stack y compartir las URL con el grupo.
 - [ ] Confirmar la suscripción SNS en el correo.
-- [ ] Crear repartidores (`POST /drivers`) y órdenes de prueba en dos zonas.
-- [ ] Evidencia de la transacción: entrega exitosa (orden `DELIVERED`, historial, contador +1, correo SNS) y entrega fallida con repartidor inexistente (409 y nada guardado).
-- [ ] Evidencia de consultas por GSI: `GET /zones/{zone}/orders` y `GET /areas/{geohashPrefix}/drivers`.
+- [x] Crear repartidor (`POST /drivers`) y órdenes de prueba en dos zonas.
+- [x] Prueba real de la transacción: entrega exitosa (orden `DELIVERED`, historial, contador 0 → 1) y entrega fallida con repartidor inexistente (409, nada guardado).
+- [ ] Guardar en `docs/evidencias/` las capturas de la transacción (incluido el correo SNS) y de las consultas por GSI (`GET /zones/{zone}/orders`, `GET /areas/{geohashPrefix}/drivers`).
+- [ ] Crear usuarios de IAM para el grupo (o acompañarlos) para la parte de EC2/ALB/CloudWatch.
 
 **Carlos**
-- [ ] Probar con `wscat` contra el stack desplegado: conexión con `?orderId=`, rechazo sin `orderId`, desconexión borra la suscripción (captura de la tabla `Subscriptions`).
+- [ ] Probar con `wscat -c "wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod?orderId=ORD-10"` contra el stack desplegado: conexión con `?orderId=`, rechazo sin `orderId`, desconexión borra la suscripción (captura de la tabla `Subscriptions`).
 
 **Oskar**
-- [ ] Ejecutar el simulador contra el stack desplegado con `--stale-after 3`.
+- [ ] Ejecutar el simulador contra el stack desplegado:
+  `python simulator/driver_sim.py --url wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod --order-id ORD-10 --driver-id DRV-1 --stale-after 3`
 - [ ] Evidencia del descarte: respuesta `ignored/stale` en los logs de CloudWatch de `location_update` y la tabla `DriverLocations` sin cambios con el `ts` viejo.
 - [ ] Evidencia del broadcast filtrado: dos clientes siguiendo órdenes distintas, cada uno recibe solo su repartidor.
 

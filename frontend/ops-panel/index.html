@@ -229,13 +229,89 @@ $("formCrear").addEventListener("submit", async (e) => {
     $("nCliente").value = $("nDriver").value = $("nOrden").value = "";
     $("bZona").value = orden.zone;
     $("bEstado").value = "";
-    if (typeof consultar === "function") consultar();
+    consultar();
   } catch (error) {
     aviso("avisoCrear", "error", error.message);
   } finally {
     boton.disabled = false;
   }
 });
+
+// ------------------------------------------------------- Consultar por zona (GSI)
+$("formBuscar").addEventListener("submit", (e) => { e.preventDefault(); consultar(); });
+
+async function consultar(conservarAviso) {
+  const zona = $("bZona").value.trim();
+  if (!zona) return;
+  const estado = $("bEstado").value;
+  const ruta = "/zones/" + encodeURIComponent(zona) + "/orders" + (estado ? "?status=" + estado : "");
+
+  if (!conservarAviso) $("avisoLista").hidden = true;
+  $("resumen").textContent = "Consultando…";
+  try {
+    const datos = await llamar("GET", ruta);
+    pintar(datos.items || []);
+    $("resumen").textContent = datos.count + (datos.count === 1 ? " orden" : " órdenes") +
+      " en la zona " + datos.zone + " · " + new Date().toLocaleTimeString("es-CO");
+  } catch (error) {
+    $("resumen").textContent = "";
+    aviso("avisoLista", "error", error.message);
+  }
+}
+
+function celda(fila, texto, clase) {
+  const td = document.createElement("td");
+  td.textContent = texto;
+  if (clase) td.className = clase;
+  fila.appendChild(td);
+  return td;
+}
+
+function pintar(ordenes) {
+  const cuerpo = $("cuerpo");
+  cuerpo.replaceChildren();
+
+  if (!ordenes.length) {
+    const fila = document.createElement("tr");
+    const td = celda(fila, "No hay órdenes con ese filtro.", "vacio");
+    td.colSpan = 6;
+    cuerpo.appendChild(fila);
+    return;
+  }
+
+  ordenes.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+
+  for (const orden of ordenes) {
+    const fila = document.createElement("tr");
+    celda(fila, orden.orderId, "mono");
+    celda(fila, orden.customer || "—");
+
+    const tdEstado = celda(fila, "");
+    const chip = document.createElement("span");
+    chip.className = "chip " + orden.status;
+    chip.textContent = ETIQUETAS[orden.status] || orden.status;
+    tdEstado.appendChild(chip);
+
+    celda(fila, orden.driverId || "—", "mono");
+    celda(fila, orden.createdAt ? new Date(orden.createdAt).toLocaleString("es-CO") : "—");
+
+    const tdAcciones = celda(fila, "");
+    const acciones = document.createElement("div");
+    acciones.className = "acciones";
+
+    if (trackingUrl) {
+      const enlace = document.createElement("a");
+      enlace.href = trackingUrl + "/index.html?orderId=" + encodeURIComponent(orden.orderId);
+      enlace.target = "_blank";
+      enlace.rel = "noopener";
+      enlace.textContent = "Ver mapa";
+      acciones.appendChild(enlace);
+    }
+
+    tdAcciones.appendChild(acciones);
+    cuerpo.appendChild(fila);
+  }
+}
 </script>
 </body>
 </html>

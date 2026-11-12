@@ -117,12 +117,55 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+// =============================================================================
+// CONFIGURACIÓN
+// Pegar aquí las URL cuando el stack esté desplegado.
+//   WS_URL  : URL del API Gateway WebSocket (la entrega Carlos), por ejemplo
+//             "wss://abc123.execute-api.us-east-1.amazonaws.com/prod"
+//   API_URL : salida "OrdersApiUrl" del stack SAM (opcional; solo se usa para
+//             mostrar si el pedido ya fue entregado)
+// También se pueden pasar por la URL sin tocar el archivo:
+//   index.html?orderId=X&ws=wss://...&api=https://...
+// Modo demostración (sin backend): index.html?orderId=X&demo=1
+// =============================================================================
+const WS_URL  = "";
+const API_URL = "";
+
 const CENTRO_INICIAL = [1.2136, -77.2811];   // Pasto
+const params  = new URLSearchParams(location.search);
+const orderId = (params.get("orderId") || "").trim();
+const wsUrl   = (params.get("ws")  || WS_URL).trim();
+const apiUrl  = (params.get("api") || API_URL).trim().replace(/\/$/, "");
+const esDemo  = params.get("demo") === "1";
+
+const $ = (id) => document.getElementById(id);
+
+// ----------------------------------------------------------------------- Mapa
 const mapa = L.map("mapa", { zoomControl: true }).setView(CENTRO_INICIAL, 14);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(mapa);
+
+const icono = L.divIcon({ className: "", html: '<div class="moto">🛵</div>', iconSize: [34, 34], iconAnchor: [17, 17] });
+let marcador = null;
+const rastro = L.polyline([], { color: "#e4572e", weight: 4, opacity: .75 }).addTo(mapa);
+
+// --------------------------------------------------------------------- Inicio
+$("formOrden").addEventListener("submit", (e) => {
+  e.preventDefault();
+  params.set("orderId", $("campoOrden").value.trim());
+  location.search = params.toString();
+});
+
+if (!orderId) {
+  $("inicio").hidden = false;
+  $("campoOrden").focus();
+} else {
+  $("etiquetaOrden").innerHTML = "Orden <b></b>";
+  $("etiquetaOrden").querySelector("b").textContent = orderId;
+  $("tarjeta").hidden = false;
+}
 </script>
 </body>
 </html>

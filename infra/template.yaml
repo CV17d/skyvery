@@ -148,16 +148,26 @@ Resources:
       Handler: app.handler
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref OrdersTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref DriversTable }
       Events:
         CreateOrder:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders, Method: POST }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/orders", Method: POST }
         GetOrder:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders/{orderId}, Method: GET }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/orders/{orderId}", Method: GET }
         ListByZone:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: /zones/{zone}/orders, Method: GET }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/zones/{zone}/orders", Method: GET }
+        CreateDriver:
+          Type: HttpApi
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/drivers", Method: POST }
+        ListDrivers:
+          Type: HttpApi
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/drivers", Method: GET }
+        GetDriver:
+          Type: HttpApi
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/drivers/{driverId}", Method: GET }
 
   CompleteDeliveryFunction:
     Type: AWS::Serverless::Function
@@ -172,7 +182,7 @@ Resources:
       Events:
         Complete:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders/{orderId}/complete, Method: POST }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/orders/{orderId}/complete", Method: POST }
 
   # ------------------------------------------------ WebSocket API (Carlos/Oskar)
   WebSocketApi:

@@ -3,6 +3,9 @@
 POST /orders                 body: {"orderId"?, "zone", "customer", "driverId"?}
 GET  /orders/{orderId}
 GET  /zones/{zone}/orders    ?status=PENDING|IN_TRANSIT|DELIVERED  (usa GSI zone-status-index)
+POST /drivers                body: {"driverId", "name"?}  -> deliveriesCount = 0
+GET  /drivers
+GET  /drivers/{driverId}
 """
 import json
 import os
@@ -12,7 +15,9 @@ from datetime import datetime, timezone
 import boto3
 from boto3.dynamodb.conditions import Key
 
-table = boto3.resource("dynamodb").Table(os.environ["ORDERS_TABLE"])
+_ddb = boto3.resource("dynamodb")
+table = _ddb.Table(os.environ["ORDERS_TABLE"])
+drivers = _ddb.Table(os.environ["DRIVERS_TABLE"])
 VALID_STATUS = {"PENDING", "IN_TRANSIT", "DELIVERED"}
 
 
@@ -54,6 +59,33 @@ def list_by_zone(zone, status):
     return _resp(200, {"zone": zone, "count": res["Count"], "items": res["Items"]})
 
 
+def create_driver(event):
+    body = json.loads(event.get("body") or "{}")
+    if not body.get("driverId"):
+        return _resp(400, {"error": "driverId es obligatorio"})
+    item = {
+        "driverId": body["driverId"],
+        "name": body.get("name", body["driverId"]),
+        "deliveriesCount": 0,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        drivers.put_item(Item=item, ConditionExpression="attribute_not_exists(driverId)")
+    except drivers.meta.client.exceptions.ConditionalCheckFailedException:
+        return _resp(409, {"error": "el repartidor ya existe"})
+    return _resp(201, item)
+
+
+def get_driver(driver_id):
+    item = drivers.get_item(Key={"driverId": driver_id}).get("Item")
+    return _resp(200, item) if item else _resp(404, {"error": "no existe"})
+
+
+def list_drivers():
+    res = drivers.scan()
+    return _resp(200, {"count": res["Count"], "items": res["Items"]})
+
+
 def handler(event, context):
     route = event.get("routeKey", "")
     params = event.get("pathParameters") or {}
@@ -65,4 +97,10 @@ def handler(event, context):
         return get_order(params["orderId"])
     if route == "GET /zones/{zone}/orders":
         return list_by_zone(params["zone"], qs.get("status"))
+    if route == "POST /drivers":
+        return create_driver(event)
+    if route == "GET /drivers":
+        return list_drivers()
+    if route == "GET /drivers/{driverId}":
+        return get_driver(params["driverId"])
     return _resp(404, {"error": f"ruta no soportada: {route}"})

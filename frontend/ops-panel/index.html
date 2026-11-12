@@ -179,6 +179,7 @@ $("btnGuardar").addEventListener("click", () => {
   guardar("skyvery.api", apiUrl);
   guardar("skyvery.tracking", trackingUrl);
   $("config").hidden = !!apiUrl;
+  if ($("bZona").value.trim()) consultar();
 });
 
 // -------------------------------------------------------------- Llamadas a la API
@@ -211,6 +212,30 @@ function aviso(id, tipo, texto) {
   caja.textContent = texto;
   caja.hidden = false;
 }
+
+// ------------------------------------------------------------------ Crear orden
+$("formCrear").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const boton = e.submitter;
+  const cuerpo = { zone: $("nZona").value.trim() };
+  if ($("nCliente").value.trim()) cuerpo.customer = $("nCliente").value.trim();
+  if ($("nDriver").value.trim())  cuerpo.driverId = $("nDriver").value.trim();
+  if ($("nOrden").value.trim())   cuerpo.orderId  = $("nOrden").value.trim();
+
+  boton.disabled = true;
+  try {
+    const orden = await llamar("POST", "/orders", cuerpo);
+    aviso("avisoCrear", "ok", "Orden " + orden.orderId + " creada en la zona " + orden.zone + ".");
+    $("nCliente").value = $("nDriver").value = $("nOrden").value = "";
+    $("bZona").value = orden.zone;
+    $("bEstado").value = "";
+    if (typeof consultar === "function") consultar();
+  } catch (error) {
+    aviso("avisoCrear", "error", error.message);
+  } finally {
+    boton.disabled = false;
+  }
+});
 </script>
 </body>
 </html>

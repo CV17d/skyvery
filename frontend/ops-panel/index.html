@@ -299,6 +299,22 @@ function pintar(ordenes) {
     const acciones = document.createElement("div");
     acciones.className = "acciones";
 
+    if (orden.status !== "DELIVERED") {
+      // Si la orden no tiene repartidor, se pide aquí mismo.
+      let campo = null;
+      if (!orden.driverId) {
+        campo = document.createElement("input");
+        campo.placeholder = "driverId";
+        campo.setAttribute("aria-label", "Repartidor para la orden " + orden.orderId);
+        acciones.appendChild(campo);
+      }
+      const boton = document.createElement("button");
+      boton.type = "button";
+      boton.textContent = "Marcar entregada";
+      boton.addEventListener("click", () => entregar(orden, campo, boton));
+      acciones.appendChild(boton);
+    }
+
     if (trackingUrl) {
       const enlace = document.createElement("a");
       enlace.href = trackingUrl + "/index.html?orderId=" + encodeURIComponent(orden.orderId);
@@ -310,6 +326,25 @@ function pintar(ordenes) {
 
     tdAcciones.appendChild(acciones);
     cuerpo.appendChild(fila);
+  }
+}
+
+// ------------------------------- Completar entrega (transacción DynamoDB + SNS)
+async function entregar(orden, campo, boton) {
+  const driverId = orden.driverId || (campo ? campo.value.trim() : "");
+  if (!driverId) {
+    aviso("avisoLista", "error", "Escribe el repartidor de la orden " + orden.orderId + ".");
+    if (campo) campo.focus();
+    return;
+  }
+  boton.disabled = true;
+  try {
+    await llamar("POST", "/orders/" + encodeURIComponent(orden.orderId) + "/complete", { driverId });
+    aviso("avisoLista", "ok", "Orden " + orden.orderId + " entregada. Se envió la confirmación por SNS.");
+    consultar(true);
+  } catch (error) {
+    aviso("avisoLista", "error", "Orden " + orden.orderId + ": " + error.message);
+    boton.disabled = false;
   }
 }
 </script>

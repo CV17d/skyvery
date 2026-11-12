@@ -100,7 +100,7 @@
         <label for="nCliente">Cliente</label>
         <input id="nCliente" placeholder="Nombre del cliente">
         <label for="nDriver">Repartidor (opcional)</label>
-        <input id="nDriver" placeholder="driver-1">
+        <input id="nDriver" placeholder="DRV-1" list="listaRepartidores" autocomplete="off">
         <label for="nOrden">ID de la orden (opcional)</label>
         <input id="nOrden" placeholder="Se genera solo si se deja vacío">
         <button type="submit">Crear orden</button>
@@ -141,6 +141,38 @@
       </div>
     </section>
   </div>
+
+  <div class="fila">
+    <section>
+      <h2>Nuevo repartidor</h2>
+      <form id="formRepartidor">
+        <label for="rId">ID del repartidor *</label>
+        <input id="rId" required placeholder="DRV-2">
+        <label for="rNombre">Nombre</label>
+        <input id="rNombre" placeholder="Nombre del repartidor">
+        <button type="submit">Crear repartidor</button>
+      </form>
+      <div id="avisoRepartidor" class="aviso" role="status" hidden></div>
+    </section>
+    <section>
+      <h2>Repartidores</h2>
+      <div class="barra">
+        <div class="resumen" id="resumenRepartidores" role="status"></div>
+        <button type="button" class="secundario" id="btnRepartidores">Actualizar</button>
+      </div>
+      <div class="tabla">
+        <table>
+          <thead>
+            <tr><th>Repartidor</th><th>Nombre</th><th>Entregas</th><th>Creado</th></tr>
+          </thead>
+          <tbody id="cuerpoRepartidores">
+            <tr><td colspan="4" class="vacio">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <datalist id="listaRepartidores"></datalist>
 </main>
 
 <script>
@@ -150,8 +182,8 @@
 // Si se dejan vacías, se pueden escribir en el botón "Configuración" del panel
 // y quedan guardadas en este navegador.
 // =============================================================================
-const API_URL      = "";   // OrdersApiUrl, p. ej. https://abc123.execute-api.us-east-1.amazonaws.com/prod
-const TRACKING_URL = "";   // FrontendUrl del bucket S3 (página de seguimiento)
+const API_URL      = "https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod";   // OrdersApiUrl
+const TRACKING_URL = "http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com";   // FrontendUrl
 
 const ETIQUETAS = { PENDING: "Pendiente", IN_TRANSIT: "En camino", DELIVERED: "Entregado" };
 const $ = (id) => document.getElementById(id);
@@ -165,8 +197,9 @@ function guardar(clave, valor) {
 }
 const sinBarra = (u) => u.trim().replace(/\/+$/, "");
 
-let apiUrl      = sinBarra(API_URL      || leerGuardado("skyvery.api"));
-let trackingUrl = sinBarra(TRACKING_URL || leerGuardado("skyvery.tracking"));
+// Lo guardado en este navegador (botón Configuración) tiene prioridad sobre el valor por defecto.
+let apiUrl      = sinBarra(leerGuardado("skyvery.api")      || API_URL);
+let trackingUrl = sinBarra(leerGuardado("skyvery.tracking") || TRACKING_URL);
 
 $("cfgApi").value = apiUrl;
 $("cfgTracking").value = trackingUrl;
@@ -305,6 +338,8 @@ function pintar(ordenes) {
       if (!orden.driverId) {
         campo = document.createElement("input");
         campo.placeholder = "driverId";
+        campo.setAttribute("list", "listaRepartidores");
+        campo.autocomplete = "off";
         campo.setAttribute("aria-label", "Repartidor para la orden " + orden.orderId);
         acciones.appendChild(campo);
       }
@@ -342,11 +377,67 @@ async function entregar(orden, campo, boton) {
     await llamar("POST", "/orders/" + encodeURIComponent(orden.orderId) + "/complete", { driverId });
     aviso("avisoLista", "ok", "Orden " + orden.orderId + " entregada. Se envió la confirmación por SNS.");
     consultar(true);
+    cargarRepartidores();   // el contador de entregas subió en la misma transacción
   } catch (error) {
     aviso("avisoLista", "error", "Orden " + orden.orderId + ": " + error.message);
     boton.disabled = false;
   }
 }
+
+// ------------------------------------------------------------------ Repartidores
+async function cargarRepartidores() {
+  if (!apiUrl) return;
+  const cuerpo = $("cuerpoRepartidores");
+  try {
+    const datos = await llamar("GET", "/drivers");
+    const lista = (datos.items || []).sort((a, b) => String(a.driverId).localeCompare(String(b.driverId)));
+    cuerpo.replaceChildren();
+    $("listaRepartidores").replaceChildren(...lista.map((r) => {
+      const op = document.createElement("option");
+      op.value = r.driverId;
+      op.label = r.name || r.driverId;
+      return op;
+    }));
+    if (!lista.length) {
+      const fila = document.createElement("tr");
+      celda(fila, "Aún no hay repartidores.", "vacio").colSpan = 4;
+      cuerpo.appendChild(fila);
+    }
+    for (const r of lista) {
+      const fila = document.createElement("tr");
+      celda(fila, r.driverId, "mono");
+      celda(fila, r.name || "—");
+      celda(fila, String(r.deliveriesCount ?? 0), "mono");
+      celda(fila, r.createdAt ? new Date(r.createdAt).toLocaleString("es-CO") : "—");
+      cuerpo.appendChild(fila);
+    }
+    $("resumenRepartidores").textContent = lista.length + (lista.length === 1 ? " repartidor" : " repartidores") +
+      " · " + new Date().toLocaleTimeString("es-CO");
+  } catch (error) {
+    $("resumenRepartidores").textContent = error.message;
+  }
+}
+
+$("formRepartidor").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const boton = e.submitter;
+  const cuerpo = { driverId: $("rId").value.trim() };
+  if ($("rNombre").value.trim()) cuerpo.name = $("rNombre").value.trim();
+  boton.disabled = true;
+  try {
+    const r = await llamar("POST", "/drivers", cuerpo);
+    aviso("avisoRepartidor", "ok", "Repartidor " + r.driverId + " creado con 0 entregas.");
+    $("rId").value = $("rNombre").value = "";
+    cargarRepartidores();
+  } catch (error) {
+    aviso("avisoRepartidor", "error", error.message);
+  } finally {
+    boton.disabled = false;
+  }
+});
+$("btnRepartidores").addEventListener("click", cargarRepartidores);
+$("btnGuardar").addEventListener("click", cargarRepartidores);
+cargarRepartidores();
 </script>
 </body>
 </html>

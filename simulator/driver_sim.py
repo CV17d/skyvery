@@ -8,6 +8,9 @@ Uso:
   python simulator/driver_sim.py --url wss://<api>.execute-api.<region>.amazonaws.com/prod \
       --order-id ORD-1 --driver-id DRV-1
 
+  # Ruta en Pasto (coincide con el mapa de la página de seguimiento)
+  python simulator/driver_sim.py --url ... --order-id ORD-1 --driver-id DRV-1 --route pasto
+
   # Demostrar el descarte: después del paso 3 envía un mensaje con ts viejo
   python simulator/driver_sim.py --url ... --order-id ORD-1 --driver-id DRV-1 --stale-after 3
 
@@ -36,6 +39,21 @@ DEFAULT_ROUTE = [
     (4.70020, -74.04230),
     (4.70210, -74.04160),
 ]
+
+# Ruta en Pasto (Plaza de Nariño -> Unicentro), coincide con el centro del mapa
+# de la página de seguimiento.
+PASTO_ROUTE = [
+    (1.21420, -77.27840),
+    (1.21480, -77.28010),
+    (1.21530, -77.28190),
+    (1.21590, -77.28360),
+    (1.21640, -77.28530),
+    (1.21690, -77.28700),
+    (1.21720, -77.28860),
+    (1.21760, -77.29010),
+]
+
+ROUTES = {"bogota": DEFAULT_ROUTE, "pasto": PASTO_ROUTE}
 
 
 def interpolate(route, steps_per_segment):
@@ -107,6 +125,8 @@ def parse_args(argv=None):
     p.add_argument("--order-id", required=True)
     p.add_argument("--driver-id", required=True)
     p.add_argument("--interval", type=float, default=5.0, help="segundos entre mensajes (default 5)")
+    p.add_argument("--route", choices=sorted(ROUTES), default="bogota",
+                   help="ruta a recorrer (default bogota)")
     p.add_argument("--steps", type=int, default=3, help="puntos intermedios por tramo de la ruta")
     p.add_argument("--stale-after", type=int, default=None,
                    help="tras el punto N envía un mensaje con timestamp viejo")
@@ -120,7 +140,7 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    points = interpolate(DEFAULT_ROUTE, args.steps)
+    points = interpolate(ROUTES[args.route], args.steps)
     plan = build_plan(points, args.stale_after)
 
     if args.dry_run:

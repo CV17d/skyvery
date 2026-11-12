@@ -91,6 +91,25 @@ class CliTest(unittest.TestCase):
         self.assertEqual(out.getvalue().count('"action": "location-update"'), len(sim.DEFAULT_ROUTE) + 1)
         self.assertIn("VIEJO", out.getvalue())
 
+    def test_ruta_pasto(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = sim.main(["--order-id", "ORD-1", "--driver-id", "DRV-1", "--dry-run",
+                             "--interval", "0", "--steps", "1", "--route", "pasto"])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().count('"action": "location-update"'), len(sim.PASTO_ROUTE))
+        first = sim.PASTO_ROUTE[0]
+        self.assertIn(f'"lat": {first[0]}', out.getvalue())
+
+    def test_ruta_por_defecto_es_bogota(self):
+        args = sim.parse_args(["--order-id", "O", "--driver-id", "D", "--dry-run"])
+        self.assertEqual(args.route, "bogota")
+
+    def test_ruta_invalida(self):
+        with redirect_stdout(io.StringIO()), mock.patch("sys.stderr", io.StringIO()), \
+                self.assertRaises(SystemExit):
+            sim.parse_args(["--order-id", "O", "--driver-id", "D", "--dry-run", "--route", "cali"])
+
 
 if __name__ == "__main__":
     unittest.main()

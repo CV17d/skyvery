@@ -212,6 +212,7 @@ function marcarEntregado() {
 
 // ------------------------------------------------------------------ WebSocket
 let socket = null;
+let intentos = 0;
 
 function conectar() {
   ponerEstado("conectando", "Conectando…");
@@ -219,6 +220,7 @@ function conectar() {
   socket = new WebSocket(wsUrl + separador + "orderId=" + encodeURIComponent(orderId));
 
   socket.onopen = () => {
+    intentos = 0;
     ponerEstado("conectado", "En vivo");
   };
 
@@ -230,6 +232,26 @@ function conectar() {
     if (m.status === "DELIVERED" || datos.status === "DELIVERED") marcarEntregado();
     recibirUbicacion(m);
   };
+
+  socket.onclose = () => {
+    if (entregado) { ponerEstado("", "Finalizado"); return; }
+    // Reintento con espera creciente: 1 s, 2 s, 4 s ... máximo 15 s
+    const espera = Math.min(15000, 1000 * 2 ** intentos++);
+    ponerEstado("caido", "Reconectando en " + Math.round(espera / 1000) + " s");
+    setTimeout(conectar, espera);
+  };
+
+  socket.onerror = () => socket.close();
+}
+
+// ----------------------------------------- Estado de la orden (API REST, opcional)
+async function consultarOrden() {
+  try {
+    const r = await fetch(apiUrl + "/orders/" + encodeURIComponent(orderId));
+    if (!r.ok) return;
+    const orden = await r.json();
+    if (orden.status === "DELIVERED" && !entregado) marcarEntregado();
+  } catch { /* la API es opcional: si falla, el mapa sigue funcionando */ }
 }
 
 // --------------------------------------------------------------------- Inicio
@@ -252,6 +274,7 @@ if (!orderId) {
     $("detalle").textContent = "Define WS_URL en index.html o agrega ?ws=wss://… a la dirección.";
   } else {
     conectar();
+    if (apiUrl) { consultarOrden(); setInterval(consultarOrden, 10000); }
   }
 }
 </script>

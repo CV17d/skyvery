@@ -154,10 +154,10 @@ Resources:
           Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders, Method: POST }
         GetOrder:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders/{orderId}, Method: GET }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/orders/{orderId}", Method: GET }
         ListByZone:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: /zones/{zone}/orders, Method: GET }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/zones/{zone}/orders", Method: GET }
 
   CompleteDeliveryFunction:
     Type: AWS::Serverless::Function
@@ -172,17 +172,152 @@ Resources:
       Events:
         Complete:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders/{orderId}/complete, Method: POST }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/orders/{orderId}/complete", Method: POST }
 
   # ------------------------------------------------ WebSocket API (Carlos/Oskar)
-  # TODO Carlos: AWS::ApiGatewayV2::Api (WEBSOCKET, $request.body.action),
-  #   rutas $connect / $disconnect, funciones ws_connect y ws_disconnect.
-  # TODO Oskar: ruta location-update + función location_update
-  #   (env WS_ENDPOINT y política execute-api:ManageConnections).
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub skyvery-ws-${Stage}
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+
+  # --- $connect
+  WsConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambdas/ws_connect/
+      Handler: app.handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref SubscriptionsTable }
+
+  WsConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref WsConnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+  WsConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsConnectFunction.Arn}/invocations
+
+  WsConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${WsConnectIntegration}
+
+  # --- $disconnect
+  WsDisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambdas/ws_disconnect/
+      Handler: app.handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref SubscriptionsTable }
+
+  WsDisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref WsDisconnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+  WsDisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WsDisconnectFunction.Arn}/invocations
+
+  WsDisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${WsDisconnectIntegration}
+
+  # --- location-update
+  # La ruta, la integración y los permisos quedan listos; el código de
+  # lambdas/location_update/app.py es de Oskar (conditional write + broadcast).
+  LocationUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambdas/location_update/
+      Handler: app.handler
+      Environment:
+        Variables:
+          # Endpoint para ApiGatewayManagementApi (postToConnection)
+          WS_ENDPOINT: !Sub https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref DriverLocationsTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref SubscriptionsTable }
+        - Statement:
+            - Effect: Allow
+              Action: execute-api:ManageConnections
+              Resource: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Stage}/POST/@connections/*
+
+  LocationUpdatePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LocationUpdateFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+  LocationUpdateIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LocationUpdateFunction.Arn}/invocations
+
+  LocationUpdateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: location-update
+      AuthorizationType: NONE
+      Target: !Sub integrations/${LocationUpdateIntegration}
+
+  # --- Deployment + stage
+  # Ojo: CloudFormation no crea un Deployment nuevo cuando cambian las rutas.
+  # Si se agrega o modifica una ruta, renombrar este recurso (p. ej. ...V2)
+  # para forzar un redeploy de la API.
+  WebSocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - WsConnectRoute
+      - WsDisconnectRoute
+      - LocationUpdateRoute
+    Properties:
+      ApiId: !Ref WebSocketApi
+
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: !Ref Stage
+      DeploymentId: !Ref WebSocketDeployment
 
 Outputs:
   OrdersApiUrl:
     Value: !Sub https://${OrdersHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+  WebSocketUrl:
+    Description: URL para clientes y simulador (wscat -c "<url>?orderId=...")
+    Value: !Sub wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+  WebSocketManagementEndpoint:
+    Description: Endpoint de ApiGatewayManagementApi (postToConnection)
+    Value: !Sub https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
   FrontendUrl:
     Value: !GetAtt FrontendBucket.WebsiteURL
   DeliveryTopicArn:

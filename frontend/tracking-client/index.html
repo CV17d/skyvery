@@ -1,1 +1,128 @@
-<!-- TODO: página del cliente que sigue una orden en un mapa -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyvery · Sigue tu pedido</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --tinta: #14213d; --suave: #5b6478; --linea: #dfe3ea; --fondo: #f5f6f8;
+    --marca: #e4572e; --ok: #1f8a4c; --alerta: #b7791f; --error: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--tinta); background: var(--fondo);
+    display: grid; grid-template-rows: auto 1fr;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 20px; background: #fff; border-bottom: 1px solid var(--linea);
+  }
+  .logo { font-weight: 800; letter-spacing: -.02em; font-size: 1.15rem; }
+  .logo span { color: var(--marca); }
+  .orden { color: var(--suave); font-size: .95rem; }
+  .orden b { color: var(--tinta); font-family: ui-monospace, Consolas, monospace; }
+  .estado {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+    font-size: .85rem; font-weight: 600; padding: 6px 12px;
+    border-radius: 999px; background: var(--fondo); border: 1px solid var(--linea);
+  }
+  .estado i { width: 9px; height: 9px; border-radius: 50%; background: var(--suave); }
+  .estado.conectado i { background: var(--ok); }
+  .estado.conectando i { background: var(--alerta); animation: pulso 1s infinite; }
+  .estado.caido i { background: var(--error); }
+  @keyframes pulso { 50% { opacity: .3; } }
+
+  main { position: relative; min-height: 0; }
+  #mapa { position: absolute; inset: 0; }
+
+  .tarjeta {
+    position: absolute; z-index: 500; left: 16px; bottom: 16px;
+    width: min(340px, calc(100% - 32px));
+    background: #fff; border: 1px solid var(--linea); border-radius: 14px;
+    padding: 16px 18px; box-shadow: 0 8px 24px rgba(20, 33, 61, .12);
+  }
+  .tarjeta h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  .tarjeta p { margin: 0; color: var(--suave); font-size: .9rem; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: .88rem; }
+  dt { color: var(--suave); }
+  dd { margin: 0; font-family: ui-monospace, Consolas, monospace; text-align: right; }
+  .entregado { color: var(--ok); }
+
+  /* Pantalla inicial cuando falta el orderId */
+  .inicio {
+    position: absolute; inset: 0; z-index: 600; display: grid; place-items: center;
+    background: var(--fondo); padding: 20px;
+  }
+  .inicio form {
+    background: #fff; border: 1px solid var(--linea); border-radius: 14px;
+    padding: 28px; width: min(380px, 100%);
+  }
+  .inicio h1 { margin: 0 0 6px; font-size: 1.4rem; letter-spacing: -.02em; }
+  .inicio p { margin: 0 0 18px; color: var(--suave); }
+  input, button { font: inherit; }
+  input {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--linea);
+    border-radius: 9px; margin-bottom: 12px;
+  }
+  button {
+    width: 100%; padding: 11px; border: 0; border-radius: 9px; cursor: pointer;
+    background: var(--marca); color: #fff; font-weight: 700;
+  }
+  input:focus-visible, button:focus-visible { outline: 3px solid rgba(228, 87, 46, .35); outline-offset: 1px; }
+  [hidden] { display: none !important; }
+
+  .moto {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--marca);
+    border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+    display: grid; place-items: center; font-size: 17px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">sky<span>very</span></div>
+  <div class="orden" id="etiquetaOrden"></div>
+  <div class="estado" id="estado"><i></i><span id="estadoTexto">Sin conexión</span></div>
+</header>
+
+<main>
+  <div id="mapa"></div>
+
+  <section class="tarjeta" id="tarjeta" hidden>
+    <h2 id="titulo">Esperando al repartidor…</h2>
+    <p id="detalle">Aún no llega ninguna ubicación para este pedido.</p>
+    <dl>
+      <dt>Repartidor</dt><dd id="repartidor">—</dd>
+      <dt>Última actualización</dt><dd id="hora">—</dd>
+      <dt>Posición</dt><dd id="posicion">—</dd>
+      <dt>Actualizaciones</dt><dd id="conteo">0</dd>
+    </dl>
+  </section>
+
+  <div class="inicio" id="inicio" hidden>
+    <form id="formOrden">
+      <h1>Sigue tu pedido</h1>
+      <p>Escribe el número de tu orden para ver al repartidor en el mapa.</p>
+      <label for="campoOrden" hidden>Número de orden</label>
+      <input id="campoOrden" placeholder="Ej: a1b2c3d4" autocomplete="off" required>
+      <button type="submit">Ver en el mapa</button>
+    </form>
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const CENTRO_INICIAL = [1.2136, -77.2811];   // Pasto
+const mapa = L.map("mapa", { zoomControl: true }).setView(CENTRO_INICIAL, 14);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+}).addTo(mapa);
+</script>
+</body>
+</html>

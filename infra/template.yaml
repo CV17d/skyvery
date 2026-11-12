@@ -149,6 +149,7 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref OrdersTable }
         - DynamoDBCrudPolicy: { TableName: !Ref DriversTable }
+        - DynamoDBReadPolicy: { TableName: !Ref DriverLocationsTable }
       Events:
         CreateOrder:
           Type: HttpApi
@@ -168,6 +169,9 @@ Resources:
         GetDriver:
           Type: HttpApi
           Properties: { ApiId: !Ref OrdersHttpApi, Path: "/drivers/{driverId}", Method: GET }
+        DriversInArea:
+          Type: HttpApi
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/areas/{geohashPrefix}/drivers", Method: GET }
 
   CompleteDeliveryFunction:
     Type: AWS::Serverless::Function

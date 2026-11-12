@@ -47,58 +47,87 @@ Reglas clave:
 ## 4. Estructura del repositorio
 
 ```
-infra/template.yaml          # AWS SAM: tablas, Lambdas, WebSocket API, SNS, S3
+infra/template.yaml          # AWS SAM: tablas, Lambdas, WebSocket API, HTTP API, SNS, S3
 lambdas/ws_connect/          # $connect   → guarda {connectionId, orderId}
 lambdas/ws_disconnect/       # $disconnect→ borra la suscripción
 lambdas/location_update/     # location-update → conditional write + broadcast
 lambdas/complete_delivery/   # transacción + publicación SNS
-lambdas/orders_api/          # API REST para crear/listar órdenes por zona (GSI)
+lambdas/orders_api/          # API REST: órdenes por zona, repartidores, repartidores por área
 simulator/driver_sim.py      # repartidor simulado (GPS cada 5 s)
 frontend/tracking-client/    # página del cliente (S3 static website + mapa Leaflet)
 frontend/ops-panel/          # panel de operaciones (servido por NGINX en EC2)
-ec2-nginx/                   # nginx.conf + user-data
-loadtest/                    # scripts de prueba de carga
-docs/evidencias/             # capturas, logs 429, resultados de pruebas
+ec2-nginx/                   # nginx.conf + user-data + guía EC2/ALB
+loadtest/                    # prueba de carga (carga.py)
+tests/                       # pruebas locales (sin AWS)
+docs/                        # websocket.md, location.md, evidencias/
+```
+
+### API REST (`OrdersApiUrl`)
+
+| Método y ruta | Qué hace | Índice |
+|---|---|---|
+| `POST /orders` | Crea una orden (`zone` obligatorio) | — |
+| `GET /orders/{orderId}` | Consulta una orden | — |
+| `GET /zones/{zone}/orders?status=` | Órdenes de una zona, opcionalmente por estado | `zone-status-index` |
+| `POST /orders/{orderId}/complete` | Entrega: transacción de 3 operaciones + SNS | — |
+| `POST /drivers` · `GET /drivers` · `GET /drivers/{driverId}` | Crear / listar / consultar repartidores | — |
+| `GET /areas/{geohashPrefix}/drivers?since=` | Repartidores en una celda geohash de 5 caracteres (~5 km) | `geohash-index` |
+
+### Pruebas locales
+
+```bash
+pip install pytest boto3 moto websockets
+python -m pytest -q tests
 ```
 
 ## 5. Reparto de trabajo
 
-### Cristian — Infraestructura base, datos y entrega (coordinador)
-- [ ] `infra/template.yaml` (SAM): las 5 tablas DynamoDB con sus **GSI**, tema **SNS** con suscripción por email, bucket **S3**.
-- [ ] `lambdas/complete_delivery`: **TransactWriteItems** (3 operaciones atómicas) + publicar en SNS. Probar que si una falla, ninguna persiste.
-- [ ] `lambdas/orders_api`: crear orden, consultar órdenes por zona usando `zone-status-index`.
-- [ ] Integrar el trabajo de todos, revisar PRs y mantener este README.
+### Etapa 1 — Código (terminada ✅)
 
-### Carlos — API Gateway WebSocket y conexiones
-- [x] Definir la **WebSocket API** con rutas `$connect`, `$disconnect` y `location-update` (`routeSelectionExpression: $request.body.action`).
-- [x] `lambdas/ws_connect`: leer `orderId` del query string y guardar `{connectionId, orderId}` en `Subscriptions`.
-- [x] `lambdas/ws_disconnect`: eliminar la suscripción.
-- [ ] Permisos IAM (`execute-api:ManageConnections`) y stage `prod`. Probar con `wscat`.
+- **Cristian**: plantilla SAM (tablas + GSI, SNS, S3, HTTP API), `complete_delivery` (transacción), `orders_api` (órdenes por zona, repartidores, repartidores por área), pruebas e integración.
+- **Carlos**: WebSocket API (`$connect`, `$disconnect`, `location-update`), `ws_connect`, `ws_disconnect`, permisos, stage y pruebas.
+- **Oskar**: `location_update` (conditional write, geohash, broadcast filtrado, limpieza `410 Gone`), simulador y pruebas.
+- **Sebas**: NGINX con rate limiting, `user-data.sh`, guía EC2/ALB, página de seguimiento, panel de operaciones y `loadtest/carga.py`.
 
-### Oskar — Ubicación en tiempo real y simulador
-- [ ] `lambdas/location_update`: **conditional write** por timestamp (descartar silenciosamente si es viejo), calcular `geohashPrefix`.
-- [ ] Broadcast **solo a los suscriptores de la orden** (Query al GSI `orderId-index`), limpiar conexiones `410 Gone`.
-- [ ] `simulator/driver_sim.py`: recorrer una ruta y enviar `{action:"location-update", orderId, driverId, lat, lng, ts}` cada 5 s; incluir un caso con timestamp viejo para demostrar el descarte.
+### Etapa 2 — Despliegue, pruebas reales y evidencias (pendiente)
 
-### Sebas — EC2, NGINX, ALB, frontends y prueba de carga
-- [ ] Lanzar **EC2** (Amazon Linux) con `ec2-nginx/user-data.sh` y `nginx.conf` con:
-  `limit_req_zone $binary_remote_addr zone=perip:10m rate=10r/s;` y `limit_req zone=perip burst=20 nodelay; limit_req_status 429;`
-  (detrás del ALB usar `real_ip_header X-Forwarded-For` para limitar por IP real del cliente).
-- [ ] **ALB** + target group + health check hacia la EC2.
-- [ ] `frontend/tracking-client` (S3, mapa Leaflet conectado al WebSocket) y `frontend/ops-panel`.
-- [ ] `loadtest/`: prueba con `hey`/`ab`/`k6` (p. ej. 50 req/s), guardar en `docs/evidencias/` el resumen y `grep " 429 " /var/log/nginx/access.log`.
+Cada evidencia (captura o log) se guarda en `docs/evidencias/` con un nombre claro.
+
+**Cristian**
+- [ ] `sam build` + `sam deploy --guided -t infra/template.yaml` (stage `prod`) y compartir con el grupo las salidas: `WebSocketUrl`, `OrdersApiUrl`, `FrontendUrl`.
+- [ ] Confirmar la suscripción SNS en el correo.
+- [ ] Crear repartidores (`POST /drivers`) y órdenes de prueba en dos zonas.
+- [ ] Evidencia de la transacción: entrega exitosa (orden `DELIVERED`, historial, contador +1, correo SNS) y entrega fallida con repartidor inexistente (409 y nada guardado).
+- [ ] Evidencia de consultas por GSI: `GET /zones/{zone}/orders` y `GET /areas/{geohashPrefix}/drivers`.
+
+**Carlos**
+- [ ] Probar con `wscat` contra el stack desplegado: conexión con `?orderId=`, rechazo sin `orderId`, desconexión borra la suscripción (captura de la tabla `Subscriptions`).
+
+**Oskar**
+- [ ] Ejecutar el simulador contra el stack desplegado con `--stale-after 3`.
+- [ ] Evidencia del descarte: respuesta `ignored/stale` en los logs de CloudWatch de `location_update` y la tabla `DriverLocations` sin cambios con el `ts` viejo.
+- [ ] Evidencia del broadcast filtrado: dos clientes siguiendo órdenes distintas, cada uno recibe solo su repartidor.
+
+**Sebas**
+- [ ] Poner `WS_URL`/`API_URL` en `frontend/tracking-client/index.html` y `API_URL`/`TRACKING_URL` en `frontend/ops-panel/index.html`; subir la página de seguimiento al bucket S3.
+- [ ] Lanzar la EC2 con `user-data.sh`, crear target group + ALB y verificar `/health`.
+- [ ] Prueba de carga con `loadtest/carga.py` contra el ALB y `grep " 429 " /var/log/nginx/access.log` → `docs/evidencias/`.
+- [ ] (Opcional) Sección de repartidores en el panel usando `POST /drivers` y `GET /drivers`, con lista desplegable al marcar entregada.
+
+**Todos**
+- [ ] Ensayar la demo completa (sección 8) y apagar/eliminar los recursos al terminar (`sam delete`, terminar EC2 y ALB) para no generar costos.
 
 ## 6. Plan por fases
 
-| Fase | Qué | Responsable |
-|---|---|---|
-| 1 | Estructura del repo + README (este commit) | Cristian |
-| 2 | Tablas + GSI + SNS en SAM; `sam deploy` inicial | Cristian |
-| 3 | WebSocket API + connect/disconnect | Carlos |
-| 4 | location_update + simulador | Oskar |
-| 5 | complete_delivery (transacción) + orders_api | Cristian |
-| 6 | EC2 + NGINX + ALB + frontends | Sebas |
-| 7 | Prueba de carga, evidencias y demo final | Todos |
+| Fase | Qué | Responsable | Estado |
+|---|---|---|---|
+| 1 | Estructura del repo + README | Cristian | ✅ |
+| 2 | Tablas + GSI + SNS + HTTP API en SAM | Cristian | ✅ |
+| 3 | WebSocket API + connect/disconnect | Carlos | ✅ |
+| 4 | location_update + simulador | Oskar | ✅ |
+| 5 | complete_delivery (transacción) + orders_api | Cristian | ✅ |
+| 6 | NGINX + EC2 + frontends + prueba de carga (código) | Sebas | ✅ |
+| 7 | Despliegue en AWS, evidencias y demo final | Todos | ⏳ |
 
 ## 7. Flujo de trabajo Git
 - Cada integrante trabaja en su rama (`feat/websocket`, `feat/location`, `feat/nginx`, ...) y abre PR hacia `main`.

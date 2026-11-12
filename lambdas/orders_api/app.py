@@ -6,11 +6,13 @@ GET  /zones/{zone}/orders    ?status=PENDING|IN_TRANSIT|DELIVERED  (usa GSI zone
 POST /drivers                body: {"driverId", "name"?}  -> deliveriesCount = 0
 GET  /drivers
 GET  /drivers/{driverId}
+GET  /areas/{geohashPrefix}/drivers  ?since=<epoch s>  (usa GSI geohash-index)
 """
 import json
 import os
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -18,12 +20,21 @@ from boto3.dynamodb.conditions import Key
 _ddb = boto3.resource("dynamodb")
 table = _ddb.Table(os.environ["ORDERS_TABLE"])
 drivers = _ddb.Table(os.environ["DRIVERS_TABLE"])
+locations = _ddb.Table(os.environ["DRIVER_LOCATIONS_TABLE"])
+GEOHASH_PREFIX_LEN = 5  # igual que GEOHASH_PREFIX_PRECISION en location_update
 VALID_STATUS = {"PENDING", "IN_TRANSIT", "DELIVERED"}
+
+
+def _json_default(value):
+    # DynamoDB devuelve los números como Decimal: se envían como número JSON.
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    return str(value)
 
 
 def _resp(code, body):
     return {"statusCode": code, "headers": {"Content-Type": "application/json"},
-            "body": json.dumps(body, default=str)}
+            "body": json.dumps(body, default=_json_default)}
 
 
 def create_order(event):
@@ -86,6 +97,21 @@ def list_drivers():
     return _resp(200, {"count": res["Count"], "items": res["Items"]})
 
 
+def drivers_in_area(prefix, since):
+    """Repartidores cuya última ubicación cae en la celda geohash `prefix`
+    (GSI geohash-index de DriverLocations). `since` = epoch en segundos opcional."""
+    if len(prefix) != GEOHASH_PREFIX_LEN:
+        return _resp(400, {"error": f"geohashPrefix debe tener {GEOHASH_PREFIX_LEN} caracteres"})
+    cond = Key("geohashPrefix").eq(prefix)
+    if since:
+        try:
+            cond = cond & Key("ts").gte(int(since))
+        except ValueError:
+            return _resp(400, {"error": "since debe ser un entero (epoch en segundos)"})
+    res = locations.query(IndexName="geohash-index", KeyConditionExpression=cond)
+    return _resp(200, {"geohashPrefix": prefix, "count": res["Count"], "items": res["Items"]})
+
+
 def handler(event, context):
     route = event.get("routeKey", "")
     params = event.get("pathParameters") or {}
@@ -103,4 +129,6 @@ def handler(event, context):
         return list_drivers()
     if route == "GET /drivers/{driverId}":
         return get_driver(params["driverId"])
+    if route == "GET /areas/{geohashPrefix}/drivers":
+        return drivers_in_area(params["geohashPrefix"], qs.get("since"))
     return _resp(404, {"error": f"ruta no soportada: {route}"})

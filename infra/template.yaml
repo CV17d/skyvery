@@ -154,10 +154,10 @@ Resources:
           Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders, Method: POST }
         GetOrder:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/orders/{orderId}", Method: GET }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders/{orderId}, Method: GET }
         ListByZone:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/zones/{zone}/orders", Method: GET }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: /zones/{zone}/orders, Method: GET }
 
   CompleteDeliveryFunction:
     Type: AWS::Serverless::Function
@@ -172,7 +172,7 @@ Resources:
       Events:
         Complete:
           Type: HttpApi
-          Properties: { ApiId: !Ref OrdersHttpApi, Path: "/orders/{orderId}/complete", Method: POST }
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders/{orderId}/complete, Method: POST }
 
   # ------------------------------------------------ WebSocket API (Carlos/Oskar)
   WebSocketApi:

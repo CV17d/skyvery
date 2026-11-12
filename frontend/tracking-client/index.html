@@ -1,1 +1,301 @@
-<!-- TODO: página del cliente que sigue una orden en un mapa -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyvery · Sigue tu pedido</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --tinta: #14213d; --suave: #5b6478; --linea: #dfe3ea; --fondo: #f5f6f8;
+    --marca: #e4572e; --ok: #1f8a4c; --alerta: #b7791f; --error: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--tinta); background: var(--fondo);
+    display: grid; grid-template-rows: auto 1fr;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 20px; background: #fff; border-bottom: 1px solid var(--linea);
+  }
+  .logo { font-weight: 800; letter-spacing: -.02em; font-size: 1.15rem; }
+  .logo span { color: var(--marca); }
+  .orden { color: var(--suave); font-size: .95rem; }
+  .orden b { color: var(--tinta); font-family: ui-monospace, Consolas, monospace; }
+  .estado {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+    font-size: .85rem; font-weight: 600; padding: 6px 12px;
+    border-radius: 999px; background: var(--fondo); border: 1px solid var(--linea);
+  }
+  .estado i { width: 9px; height: 9px; border-radius: 50%; background: var(--suave); }
+  .estado.conectado i { background: var(--ok); }
+  .estado.conectando i { background: var(--alerta); animation: pulso 1s infinite; }
+  .estado.caido i { background: var(--error); }
+  @keyframes pulso { 50% { opacity: .3; } }
+
+  main { position: relative; min-height: 0; }
+  #mapa { position: absolute; inset: 0; }
+
+  .tarjeta {
+    position: absolute; z-index: 500; left: 16px; bottom: 16px;
+    width: min(340px, calc(100% - 32px));
+    background: #fff; border: 1px solid var(--linea); border-radius: 14px;
+    padding: 16px 18px; box-shadow: 0 8px 24px rgba(20, 33, 61, .12);
+  }
+  .tarjeta h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  .tarjeta p { margin: 0; color: var(--suave); font-size: .9rem; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: .88rem; }
+  dt { color: var(--suave); }
+  dd { margin: 0; font-family: ui-monospace, Consolas, monospace; text-align: right; }
+  .entregado { color: var(--ok); }
+
+  /* Pantalla inicial cuando falta el orderId */
+  .inicio {
+    position: absolute; inset: 0; z-index: 600; display: grid; place-items: center;
+    background: var(--fondo); padding: 20px;
+  }
+  .inicio form {
+    background: #fff; border: 1px solid var(--linea); border-radius: 14px;
+    padding: 28px; width: min(380px, 100%);
+  }
+  .inicio h1 { margin: 0 0 6px; font-size: 1.4rem; letter-spacing: -.02em; }
+  .inicio p { margin: 0 0 18px; color: var(--suave); }
+  input, button { font: inherit; }
+  input {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--linea);
+    border-radius: 9px; margin-bottom: 12px;
+  }
+  button {
+    width: 100%; padding: 11px; border: 0; border-radius: 9px; cursor: pointer;
+    background: var(--marca); color: #fff; font-weight: 700;
+  }
+  input:focus-visible, button:focus-visible { outline: 3px solid rgba(228, 87, 46, .35); outline-offset: 1px; }
+  [hidden] { display: none !important; }
+
+  .moto {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--marca);
+    border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+    display: grid; place-items: center; font-size: 17px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">sky<span>very</span></div>
+  <div class="orden" id="etiquetaOrden"></div>
+  <div class="estado" id="estado"><i></i><span id="estadoTexto">Sin conexión</span></div>
+</header>
+
+<main>
+  <div id="mapa"></div>
+
+  <section class="tarjeta" id="tarjeta" hidden>
+    <h2 id="titulo">Esperando al repartidor…</h2>
+    <p id="detalle">Aún no llega ninguna ubicación para este pedido.</p>
+    <dl>
+      <dt>Repartidor</dt><dd id="repartidor">—</dd>
+      <dt>Última actualización</dt><dd id="hora">—</dd>
+      <dt>Posición</dt><dd id="posicion">—</dd>
+      <dt>Actualizaciones</dt><dd id="conteo">0</dd>
+    </dl>
+  </section>
+
+  <div class="inicio" id="inicio" hidden>
+    <form id="formOrden">
+      <h1>Sigue tu pedido</h1>
+      <p>Escribe el número de tu orden para ver al repartidor en el mapa.</p>
+      <label for="campoOrden" hidden>Número de orden</label>
+      <input id="campoOrden" placeholder="Ej: a1b2c3d4" autocomplete="off" required>
+      <button type="submit">Ver en el mapa</button>
+    </form>
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// =============================================================================
+// CONFIGURACIÓN
+// Pegar aquí las URL cuando el stack esté desplegado.
+//   WS_URL  : URL del API Gateway WebSocket (la entrega Carlos), por ejemplo
+//             "wss://abc123.execute-api.us-east-1.amazonaws.com/prod"
+//   API_URL : salida "OrdersApiUrl" del stack SAM (opcional; solo se usa para
+//             mostrar si el pedido ya fue entregado)
+// También se pueden pasar por la URL sin tocar el archivo:
+//   index.html?orderId=X&ws=wss://...&api=https://...
+// Modo demostración (sin backend): index.html?orderId=X&demo=1
+// =============================================================================
+const WS_URL  = "";
+const API_URL = "";
+
+const CENTRO_INICIAL = [1.2136, -77.2811];   // Pasto
+const params  = new URLSearchParams(location.search);
+const orderId = (params.get("orderId") || "").trim();
+const wsUrl   = (params.get("ws")  || WS_URL).trim();
+const apiUrl  = (params.get("api") || API_URL).trim().replace(/\/$/, "");
+const esDemo  = params.get("demo") === "1";
+
+const $ = (id) => document.getElementById(id);
+
+// ----------------------------------------------------------------------- Mapa
+const mapa = L.map("mapa", { zoomControl: true }).setView(CENTRO_INICIAL, 14);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+}).addTo(mapa);
+
+const icono = L.divIcon({ className: "", html: '<div class="moto">🛵</div>', iconSize: [34, 34], iconAnchor: [17, 17] });
+let marcador = null;
+const rastro = L.polyline([], { color: "#e4572e", weight: 4, opacity: .75 }).addTo(mapa);
+
+let ultimoTs = 0;
+let conteo = 0;
+let entregado = false;
+
+function ponerEstado(clase, texto) {
+  $("estado").className = "estado " + clase;
+  $("estadoTexto").textContent = texto;
+}
+
+// Convierte el ts del mensaje a milisegundos (acepta segundos, ms o ISO).
+function tsAMilisegundos(ts) {
+  if (typeof ts === "number") return ts < 1e12 ? ts * 1000 : ts;
+  const n = Number(ts);
+  if (!Number.isNaN(n)) return n < 1e12 ? n * 1000 : n;
+  const d = Date.parse(ts);
+  return Number.isNaN(d) ? Date.now() : d;
+}
+
+// Procesa un mensaje {orderId, driverId, lat, lng, ts}
+function recibirUbicacion(m) {
+  // Defensa extra: el backend ya filtra, pero ignoramos otras órdenes.
+  if (m.orderId && m.orderId !== orderId) return;
+
+  const lat = Number(m.lat), lng = Number(m.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  // No retroceder en el tiempo si llega un mensaje desordenado.
+  const ts = tsAMilisegundos(m.ts);
+  if (ts < ultimoTs) return;
+  ultimoTs = ts;
+
+  const punto = [lat, lng];
+  if (!marcador) {
+    marcador = L.marker(punto, { icon: icono }).addTo(mapa);
+    mapa.setView(punto, 16);
+  } else {
+    marcador.setLatLng(punto);
+    if (!mapa.getBounds().pad(-0.2).contains(punto)) mapa.panTo(punto);
+  }
+  rastro.addLatLng(punto);
+
+  conteo++;
+  if (!entregado) {
+    $("titulo").textContent = "Tu pedido va en camino";
+    $("detalle").textContent = "El mapa se actualiza solo cada pocos segundos.";
+  }
+  $("repartidor").textContent = m.driverId || "—";
+  $("hora").textContent = new Date(ts).toLocaleTimeString("es-CO");
+  $("posicion").textContent = lat.toFixed(5) + ", " + lng.toFixed(5);
+  $("conteo").textContent = conteo;
+}
+
+function marcarEntregado() {
+  entregado = true;
+  $("titulo").textContent = "Pedido entregado ✓";
+  $("titulo").className = "entregado";
+  $("detalle").textContent = "Gracias por pedir con Skyvery.";
+}
+
+// ------------------------------------------------------------------ WebSocket
+let socket = null;
+let intentos = 0;
+
+function conectar() {
+  ponerEstado("conectando", "Conectando…");
+  const separador = wsUrl.includes("?") ? "&" : "?";
+  socket = new WebSocket(wsUrl + separador + "orderId=" + encodeURIComponent(orderId));
+
+  socket.onopen = () => {
+    intentos = 0;
+    ponerEstado("conectado", "En vivo");
+  };
+
+  socket.onmessage = (evento) => {
+    let datos;
+    try { datos = JSON.parse(evento.data); } catch { return; }
+    // Acepta el mensaje plano o envuelto en {data:{...}} / {location:{...}}
+    const m = datos.data || datos.location || datos;
+    if (m.status === "DELIVERED" || datos.status === "DELIVERED") marcarEntregado();
+    recibirUbicacion(m);
+  };
+
+  socket.onclose = () => {
+    if (entregado) { ponerEstado("", "Finalizado"); return; }
+    // Reintento con espera creciente: 1 s, 2 s, 4 s ... máximo 15 s
+    const espera = Math.min(15000, 1000 * 2 ** intentos++);
+    ponerEstado("caido", "Reconectando en " + Math.round(espera / 1000) + " s");
+    setTimeout(conectar, espera);
+  };
+
+  socket.onerror = () => socket.close();
+}
+
+// ----------------------------------------- Estado de la orden (API REST, opcional)
+async function consultarOrden() {
+  try {
+    const r = await fetch(apiUrl + "/orders/" + encodeURIComponent(orderId));
+    if (!r.ok) return;
+    const orden = await r.json();
+    if (orden.status === "DELIVERED" && !entregado) marcarEntregado();
+  } catch { /* la API es opcional: si falla, el mapa sigue funcionando */ }
+}
+
+// ---------------------------------------------------------- Modo demostración
+function iniciarDemo() {
+  ponerEstado("conectado", "Demo (sin backend)");
+  let paso = 0;
+  const enviar = () => {
+    paso++;
+    recibirUbicacion({
+      orderId, driverId: "driver-demo",
+      lat: CENTRO_INICIAL[0] + 0.0006 * paso,
+      lng: CENTRO_INICIAL[1] + 0.0004 * paso + 0.0003 * Math.sin(paso / 2),
+      ts: Date.now()
+    });
+  };
+  enviar();
+  setInterval(enviar, 2000);
+}
+
+// --------------------------------------------------------------------- Inicio
+$("formOrden").addEventListener("submit", (e) => {
+  e.preventDefault();
+  params.set("orderId", $("campoOrden").value.trim());
+  location.search = params.toString();
+});
+
+if (!orderId) {
+  $("inicio").hidden = false;
+  $("campoOrden").focus();
+} else {
+  $("etiquetaOrden").innerHTML = "Orden <b></b>";
+  $("etiquetaOrden").querySelector("b").textContent = orderId;
+  $("tarjeta").hidden = false;
+
+  if (esDemo) {
+    iniciarDemo();
+  } else if (!wsUrl) {
+    ponerEstado("caido", "Falta configurar WS_URL");
+    $("detalle").textContent = "Define WS_URL en index.html o agrega ?ws=wss://… a la dirección.";
+  } else {
+    conectar();
+    if (apiUrl) { consultarOrden(); setInterval(consultarOrden, 10000); }
+  }
+}
+</script>
+</body>
+</html>

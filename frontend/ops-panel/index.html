@@ -1,1 +1,149 @@
-<!-- TODO: panel de operaciones servido por NGINX en EC2 -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyvery · Panel de operaciones</title>
+<style>
+  :root {
+    --tinta: #14213d; --suave: #5b6478; --linea: #dfe3ea; --fondo: #f5f6f8;
+    --marca: #e4572e; --ok: #1f8a4c; --alerta: #b7791f; --error: #c0392b; --azul: #2563a8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--tinta); background: var(--fondo); line-height: 1.45;
+  }
+  header {
+    background: var(--tinta); color: #fff; padding: 14px 24px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .logo { font-weight: 800; font-size: 1.15rem; letter-spacing: -.02em; }
+  .logo span { color: var(--marca); }
+  header small { color: #aab3c5; }
+  header button { margin-left: auto; background: transparent; border: 1px solid #47536e; color: #fff; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; display: grid; gap: 20px; }
+  .fila { display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .fila { grid-template-columns: 1fr; } }
+
+  section { background: #fff; border: 1px solid var(--linea); border-radius: 12px; padding: 20px; }
+  h2 { margin: 0 0 14px; font-size: 1rem; }
+
+  label { display: block; font-size: .8rem; font-weight: 600; color: var(--suave); margin: 0 0 4px; }
+  input, select, button { font: inherit; }
+  input, select {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--linea);
+    border-radius: 8px; background: #fff; color: var(--tinta); margin-bottom: 12px;
+  }
+  button {
+    padding: 9px 14px; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--marca); color: #fff; font-weight: 700;
+  }
+  button.secundario { background: #fff; color: var(--tinta); border: 1px solid var(--linea); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 3px solid rgba(228, 87, 46, .35); outline-offset: 1px;
+  }
+
+  .barra { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 14px; }
+  .barra > div { flex: 1 1 150px; }
+  .barra input, .barra select { margin-bottom: 0; }
+
+  .resumen { color: var(--suave); font-size: .88rem; margin-bottom: 10px; min-height: 1.3em; }
+  .tabla { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th { text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); }
+  th, td { padding: 10px 8px; border-bottom: 1px solid var(--linea); vertical-align: middle; }
+  td.mono { font-family: ui-monospace, Consolas, monospace; }
+  td input { margin: 0; padding: 6px 8px; width: 120px; }
+  td .acciones { display: flex; gap: 8px; align-items: center; }
+  td button { padding: 6px 10px; font-size: .85rem; }
+
+  .chip { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .75rem; font-weight: 700; }
+  .PENDING    { background: #fdf3dc; color: var(--alerta); }
+  .IN_TRANSIT { background: #e2edf9; color: var(--azul); }
+  .DELIVERED  { background: #e0f3e8; color: var(--ok); }
+
+  .aviso { padding: 10px 12px; border-radius: 8px; font-size: .9rem; margin-top: 4px; }
+  .aviso.ok    { background: #e0f3e8; color: #17663a; }
+  .aviso.error { background: #fbe6e3; color: #94281c; }
+  .vacio { text-align: center; color: var(--suave); padding: 28px 8px; }
+  [hidden] { display: none !important; }
+  a { color: var(--azul); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">sky<span>very</span></div>
+  <small>Panel de operaciones · servido por NGINX en EC2</small>
+  <button type="button" id="btnConfig">Configuración</button>
+</header>
+
+<main>
+  <section id="config" hidden>
+    <h2>Configuración</h2>
+    <label for="cfgApi">URL de la API de órdenes (salida <code>OrdersApiUrl</code> del stack)</label>
+    <input id="cfgApi" placeholder="https://abc123.execute-api.us-east-1.amazonaws.com/prod">
+    <label for="cfgTracking">URL de la página de seguimiento (salida <code>FrontendUrl</code>, opcional)</label>
+    <input id="cfgTracking" placeholder="http://skyvery-frontend-....s3-website-us-east-1.amazonaws.com">
+    <button type="button" id="btnGuardar">Guardar</button>
+  </section>
+
+  <div class="fila">
+    <section>
+      <h2>Nueva orden</h2>
+      <form id="formCrear">
+        <label for="nZona">Zona *</label>
+        <input id="nZona" required placeholder="centro">
+        <label for="nCliente">Cliente</label>
+        <input id="nCliente" placeholder="Nombre del cliente">
+        <label for="nDriver">Repartidor (opcional)</label>
+        <input id="nDriver" placeholder="driver-1">
+        <label for="nOrden">ID de la orden (opcional)</label>
+        <input id="nOrden" placeholder="Se genera solo si se deja vacío">
+        <button type="submit">Crear orden</button>
+      </form>
+      <div id="avisoCrear" class="aviso" role="status" hidden></div>
+    </section>
+
+    <section>
+      <h2>Órdenes por zona</h2>
+      <form class="barra" id="formBuscar">
+        <div>
+          <label for="bZona">Zona</label>
+          <input id="bZona" required placeholder="centro">
+        </div>
+        <div>
+          <label for="bEstado">Estado</label>
+          <select id="bEstado">
+            <option value="">Todos</option>
+            <option value="PENDING">Pendiente</option>
+            <option value="IN_TRANSIT">En camino</option>
+            <option value="DELIVERED">Entregado</option>
+          </select>
+        </div>
+        <button type="submit">Consultar</button>
+      </form>
+
+      <div class="resumen" id="resumen" role="status"></div>
+      <div id="avisoLista" class="aviso" role="status" hidden></div>
+      <div class="tabla">
+        <table>
+          <thead>
+            <tr><th>Orden</th><th>Cliente</th><th>Estado</th><th>Repartidor</th><th>Creada</th><th>Acciones</th></tr>
+          </thead>
+          <tbody id="cuerpo">
+            <tr><td colspan="6" class="vacio">Escribe una zona y pulsa Consultar.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+</script>
+</body>
+</html>

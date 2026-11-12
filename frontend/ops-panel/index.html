@@ -144,6 +144,73 @@
 </main>
 
 <script>
+// =============================================================================
+// CONFIGURACIÓN
+// Pegar aquí las URL cuando el stack esté desplegado (salidas de `sam deploy`).
+// Si se dejan vacías, se pueden escribir en el botón "Configuración" del panel
+// y quedan guardadas en este navegador.
+// =============================================================================
+const API_URL      = "";   // OrdersApiUrl, p. ej. https://abc123.execute-api.us-east-1.amazonaws.com/prod
+const TRACKING_URL = "";   // FrontendUrl del bucket S3 (página de seguimiento)
+
+const ETIQUETAS = { PENDING: "Pendiente", IN_TRANSIT: "En camino", DELIVERED: "Entregado" };
+const $ = (id) => document.getElementById(id);
+
+// ------------------------------------------------- Configuración en el navegador
+function leerGuardado(clave) {
+  try { return localStorage.getItem(clave) || ""; } catch { return ""; }
+}
+function guardar(clave, valor) {
+  try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento: vale solo esta sesión */ }
+}
+const sinBarra = (u) => u.trim().replace(/\/+$/, "");
+
+let apiUrl      = sinBarra(API_URL      || leerGuardado("skyvery.api"));
+let trackingUrl = sinBarra(TRACKING_URL || leerGuardado("skyvery.tracking"));
+
+$("cfgApi").value = apiUrl;
+$("cfgTracking").value = trackingUrl;
+if (!apiUrl) $("config").hidden = false;
+
+$("btnConfig").addEventListener("click", () => { $("config").hidden = !$("config").hidden; });
+$("btnGuardar").addEventListener("click", () => {
+  apiUrl = sinBarra($("cfgApi").value);
+  trackingUrl = sinBarra($("cfgTracking").value);
+  guardar("skyvery.api", apiUrl);
+  guardar("skyvery.tracking", trackingUrl);
+  $("config").hidden = !!apiUrl;
+});
+
+// -------------------------------------------------------------- Llamadas a la API
+async function llamar(metodo, ruta, cuerpo) {
+  if (!apiUrl) throw new Error("Falta la URL de la API. Ábrela en Configuración.");
+  const opciones = { method: metodo };
+  if (cuerpo) {
+    opciones.headers = { "Content-Type": "application/json" };
+    opciones.body = JSON.stringify(cuerpo);
+  }
+  let respuesta;
+  try {
+    respuesta = await fetch(apiUrl + ruta, opciones);
+  } catch {
+    throw new Error("No se pudo conectar con la API. Revisa la URL en Configuración.");
+  }
+  let datos = {};
+  try { datos = await respuesta.json(); } catch { /* respuesta sin JSON */ }
+  if (!respuesta.ok) {
+    let mensaje = datos.error || datos.message || ("Error " + respuesta.status);
+    if (datos.reasons) mensaje += " (" + datos.reasons.join(", ") + ")";
+    throw new Error(mensaje);
+  }
+  return datos;
+}
+
+function aviso(id, tipo, texto) {
+  const caja = $(id);
+  caja.className = "aviso " + tipo;
+  caja.textContent = texto;
+  caja.hidden = false;
+}
 </script>
 </body>
 </html>

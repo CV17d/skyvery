@@ -254,6 +254,23 @@ async function consultarOrden() {
   } catch { /* la API es opcional: si falla, el mapa sigue funcionando */ }
 }
 
+// ---------------------------------------------------------- Modo demostración
+function iniciarDemo() {
+  ponerEstado("conectado", "Demo (sin backend)");
+  let paso = 0;
+  const enviar = () => {
+    paso++;
+    recibirUbicacion({
+      orderId, driverId: "driver-demo",
+      lat: CENTRO_INICIAL[0] + 0.0006 * paso,
+      lng: CENTRO_INICIAL[1] + 0.0004 * paso + 0.0003 * Math.sin(paso / 2),
+      ts: Date.now()
+    });
+  };
+  enviar();
+  setInterval(enviar, 2000);
+}
+
 // --------------------------------------------------------------------- Inicio
 $("formOrden").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -269,7 +286,9 @@ if (!orderId) {
   $("etiquetaOrden").querySelector("b").textContent = orderId;
   $("tarjeta").hidden = false;
 
-  if (!wsUrl) {
+  if (esDemo) {
+    iniciarDemo();
+  } else if (!wsUrl) {
     ponerEstado("caido", "Falta configurar WS_URL");
     $("detalle").textContent = "Define WS_URL en index.html o agrega ?ws=wss://… a la dirección.";
   } else {

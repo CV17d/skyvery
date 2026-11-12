@@ -77,28 +77,19 @@ En el panel, botón **Configuración**: pegar `OrdersApiUrl` y `FrontendUrl`
 
 El botón **Marcar entregada** llama a `POST /orders/{orderId}/complete`. Esa
 transacción exige que el repartidor **ya exista** en la tabla `Drivers`; si no
-existe, responde **409** y no se guarda nada. Por ahora la API no tiene
-endpoints para crear repartidores, así que hay que insertarlos a mano una vez
-desplegado el stack (la tabla se llama `skyvery-drivers-prod` con el stage por
-defecto):
+existe, responde **409** y no se guarda nada.
+
+Los repartidores se crean con la API de órdenes (`OrdersApiUrl` del stack):
 
 ```bash
-aws dynamodb put-item --table-name skyvery-drivers-prod --item '{"driverId":{"S":"driver-1"},"deliveriesCount":{"N":"0"}}'
+curl -X POST "$API_URL/drivers" -H "Content-Type: application/json" -d '{"driverId":"driver-1","name":"Repartidor 1"}'
+curl "$API_URL/drivers"            # listar
+curl "$API_URL/drivers/driver-1"   # ver deliveriesCount (sube tras cada entrega)
 ```
 
-En PowerShell las comillas del JSON suelen dar problemas. Si falla, hacerlo
-desde la consola de AWS: DynamoDB > Tablas > `skyvery-drivers-prod` >
-Explorar elementos > Crear elemento, con `driverId` (cadena) y
-`deliveriesCount` (número) en 0.
-
-Usar el **mismo `driverId`** al crear la orden en el panel, para que el botón
-"Marcar entregada" lo envíe tal cual.
-
-Pendiente (Cristian, cuando la rama de la WebSocket API esté en `main`):
-`POST /drivers`, `GET /drivers/{driverId}` y `GET /drivers`. Con esos endpoints
-se puede agregar al panel una sección para crear y listar repartidores, y
-cambiar el campo de texto del repartidor por una lista desplegable. Mientras
-tanto el panel no necesita cambios.
+`POST /drivers` crea el repartidor con `deliveriesCount = 0` y responde 409 si
+ya existe. Mejora opcional del panel: una sección para crear/listar
+repartidores y una lista desplegable en lugar del campo de texto.
 
 ## 7. Publicar la página de seguimiento en S3
 

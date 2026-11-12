@@ -107,37 +107,33 @@ Para sus pruebas creen órdenes nuevas, por ejemplo:
 curl -X POST https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod/orders -H "Content-Type: application/json" -d '{"orderId":"ORD-10","zone":"centro","driverId":"DRV-1"}'
 ```
 
-- **Simulador y `wscat`** no necesitan cuenta de AWS, solo la URL del WebSocket.
-- **EC2, ALB, S3 y CloudWatch** requieren acceso a la cuenta: pídanle a Cristian un usuario de IAM o háganlo junto con él.
+- **Solo Cristian opera AWS** (perfil `skyvery`). Carlos, Oskar y Sebas trabajan únicamente en GitHub (rama propia + PR a `main`); no necesitan cuenta de AWS.
 - Al terminar la demo: `sam delete --stack-name skyvery-prod --profile skyvery` y terminar la EC2 y el ALB.
 
-Cada evidencia (captura o log) se guarda en `docs/evidencias/` con un nombre claro.
+Cada evidencia (captura o log) se guarda en `docs/evidencias/` con el nombre indicado.
 
-**Cristian**
+**Cristian — todo lo que se hace en AWS**
 - [x] `sam deploy` del stack y compartir las URL con el grupo.
-- [ ] Confirmar la suscripción SNS en el correo.
-- [x] Crear repartidor (`POST /drivers`) y órdenes de prueba en dos zonas.
-- [x] Prueba real de la transacción: entrega exitosa (orden `DELIVERED`, historial, contador 0 → 1) y entrega fallida con repartidor inexistente (409, nada guardado).
-- [ ] Guardar en `docs/evidencias/` las capturas de la transacción (incluido el correo SNS) y de las consultas por GSI (`GET /zones/{zone}/orders`, `GET /areas/{geohashPrefix}/drivers`).
-- [ ] Crear usuarios de IAM para el grupo (o acompañarlos) para la parte de EC2/ALB/CloudWatch.
+- [x] Confirmar la suscripción SNS en el correo.
+- [x] Crear repartidor y órdenes de prueba en dos zonas; probar la transacción (éxito y fallo con 409).
+- [ ] Subir la página de seguimiento al bucket S3 (cuando Sebas ponga las URL).
+- [ ] Lanzar la EC2 con `ec2-nginx/user-data.sh`, crear target group + ALB y verificar `/health`.
+- [ ] Prueba de carga con `loadtest/carga.py` contra el ALB y sacar los 429 del log de NGINX.
+- [ ] Ejecutar el simulador y `wscat` contra el stack para las evidencias del WebSocket.
+- [ ] Tomar las capturas de la lista de evidencias (sección 8).
 
-**Carlos**
-- [ ] Probar con `wscat -c "wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod?orderId=ORD-10"` contra el stack desplegado: conexión con `?orderId=`, rechazo sin `orderId`, desconexión borra la suscripción (captura de la tabla `Subscriptions`).
+**Carlos — GitHub**
+- [ ] `docs/demo.md`: guion paso a paso de la demo (qué se muestra, en qué orden, qué comando o pantalla y qué requisito cumple), usando las URL de esta sección.
 
-**Oskar**
-- [ ] Ejecutar el simulador contra el stack desplegado:
-  `python simulator/driver_sim.py --url wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod --order-id ORD-10 --driver-id DRV-1 --stale-after 3`
-- [ ] Evidencia del descarte: respuesta `ignored/stale` en los logs de CloudWatch de `location_update` y la tabla `DriverLocations` sin cambios con el `ts` viejo.
-- [ ] Evidencia del broadcast filtrado: dos clientes siguiendo órdenes distintas, cada uno recibe solo su repartidor.
+**Oskar — GitHub**
+- [ ] Opción `--route pasto` en `simulator/driver_sim.py` con una ruta en Pasto, para que coincida con el centro del mapa de la página de seguimiento (mantener la ruta de Bogotá por defecto y actualizar sus pruebas).
 
-**Sebas**
-- [ ] Poner `WS_URL`/`API_URL` en `frontend/tracking-client/index.html` y `API_URL`/`TRACKING_URL` en `frontend/ops-panel/index.html`; subir la página de seguimiento al bucket S3.
-- [ ] Lanzar la EC2 con `user-data.sh`, crear target group + ALB y verificar `/health`.
-- [ ] Prueba de carga con `loadtest/carga.py` contra el ALB y `grep " 429 " /var/log/nginx/access.log` → `docs/evidencias/`.
-- [ ] (Opcional) Sección de repartidores en el panel usando `POST /drivers` y `GET /drivers`, con lista desplegable al marcar entregada.
+**Sebas — GitHub**
+- [ ] Poner `WS_URL`/`API_URL` en `frontend/tracking-client/index.html` y `API_URL`/`TRACKING_URL` en `frontend/ops-panel/index.html` con las URL de esta sección.
+- [ ] Sección de repartidores en el panel (`POST /drivers`, `GET /drivers`) y lista desplegable al marcar una orden como entregada.
 
 **Todos**
-- [ ] Ensayar la demo completa (sección 8) y apagar/eliminar los recursos al terminar (`sam delete`, terminar EC2 y ALB) para no generar costos.
+- [ ] Ensayar la demo completa (sección 8).
 
 ## 6. Plan por fases
 
@@ -155,8 +151,18 @@ Cada evidencia (captura o log) se guarda en `docs/evidencias/` con un nombre cla
 - Cada integrante trabaja en su rama (`feat/websocket`, `feat/location`, `feat/nginx`, ...) y abre PR hacia `main`.
 - Nunca subir credenciales AWS, `.pem` ni `.env`.
 
-## 8. Requisitos para la demo
-1. Dos navegadores siguiendo órdenes distintas: cada uno solo recibe su repartidor.
-2. Mensaje con timestamp viejo → descartado sin error.
-3. Completar entrega → orden `DELIVERED`, historial creado, contador +1, email SNS recibido.
-4. Prueba de carga → logs NGINX con respuestas **429**.
+## 8. Requisitos para la demo y evidencias
+
+| # | Requisito | Captura (`docs/evidencias/`) |
+|---|---|---|
+| 1 | Stack desplegado | `01-stack-outputs.png`: CloudFormation → `skyvery-prod` → Salidas |
+| 2 | WebSocket con 3 rutas | `02-websocket-rutas.png`: API Gateway → `skyvery-ws-prod` → Rutas (`$connect`, `$disconnect`, `location-update`) |
+| 3 | Suscripciones con GSI | `03-subscriptions-gsi.png`: DynamoDB → `skyvery-subscriptions-prod` → Índices (`orderId-index`) y elementos con dos clientes conectados |
+| 4 | Broadcast filtrado | `04-broadcast-filtrado.png`: dos navegadores/`wscat` siguiendo órdenes distintas; cada uno recibe solo la suya |
+| 5 | Conditional write | `05-ts-viejo-descartado.png`: simulador con `--stale-after 3` + log de CloudWatch de `location_update` con `ignored/stale` y la tabla `DriverLocations` con el `ts` más nuevo |
+| 6 | Transacción exitosa | `06-entrega-ok.png`: respuesta 200 + orden `DELIVERED` + registro en `DeliveryHistory` + `deliveriesCount` aumentado |
+| 7 | Transacción fallida | `07-entrega-409.png`: respuesta 409 con repartidor inexistente + la orden sigue `PENDING` y no hay historial |
+| 8 | Confirmación SNS | `08-correo-sns.png`: correo "pedido … entregado" |
+| 9 | GSI por zona geográfica | `09-gsi-zona.png`: `GET /zones/{zone}/orders` y `GET /areas/{geohashPrefix}/drivers` |
+| 10 | Panel en EC2 detrás del ALB | `10-panel-alb.png`: panel abierto con la URL del ALB + target group *healthy* |
+| 11 | Rate limiting | `11-carga-resumen.txt` (salida de `carga.py`) y `12-nginx-429.txt` (`grep " 429 " /var/log/nginx/access.log`) |

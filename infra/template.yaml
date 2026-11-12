@@ -1,1 +1,193 @@
-# TODO: plantilla AWS SAM con todos los recursos
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Skyvery - Plataforma de delivery con seguimiento en tiempo real
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+  NotificationEmail:
+    Type: String
+    Description: Email que recibe las confirmaciones de entrega (SNS)
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 256
+    Environment:
+      Variables:
+        ORDERS_TABLE: !Ref OrdersTable
+        SUBSCRIPTIONS_TABLE: !Ref SubscriptionsTable
+        DRIVER_LOCATIONS_TABLE: !Ref DriverLocationsTable
+        HISTORY_TABLE: !Ref DeliveryHistoryTable
+        DRIVERS_TABLE: !Ref DriversTable
+        DELIVERY_TOPIC_ARN: !Ref DeliveryTopic
+
+Resources:
+  # ---------------------------------------------------------------- DynamoDB
+  SubscriptionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub skyvery-subscriptions-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: connectionId, AttributeType: S }
+        - { AttributeName: orderId, AttributeType: S }
+      KeySchema:
+        - { AttributeName: connectionId, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: orderId-index
+          KeySchema:
+            - { AttributeName: orderId, KeyType: HASH }
+          Projection: { ProjectionType: KEYS_ONLY }
+      TimeToLiveSpecification: { AttributeName: ttl, Enabled: true }
+
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub skyvery-orders-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: orderId, AttributeType: S }
+        - { AttributeName: zone, AttributeType: S }
+        - { AttributeName: status, AttributeType: S }
+      KeySchema:
+        - { AttributeName: orderId, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: zone-status-index
+          KeySchema:
+            - { AttributeName: zone, KeyType: HASH }
+            - { AttributeName: status, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+
+  DriverLocationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub skyvery-driver-locations-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: driverId, AttributeType: S }
+        - { AttributeName: geohashPrefix, AttributeType: S }
+        - { AttributeName: ts, AttributeType: N }
+      KeySchema:
+        - { AttributeName: driverId, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: geohash-index
+          KeySchema:
+            - { AttributeName: geohashPrefix, KeyType: HASH }
+            - { AttributeName: ts, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+
+  DeliveryHistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub skyvery-delivery-history-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: orderId, AttributeType: S }
+        - { AttributeName: deliveredAt, AttributeType: S }
+      KeySchema:
+        - { AttributeName: orderId, KeyType: HASH }
+        - { AttributeName: deliveredAt, KeyType: RANGE }
+
+  DriversTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub skyvery-drivers-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: driverId, AttributeType: S }
+      KeySchema:
+        - { AttributeName: driverId, KeyType: HASH }
+
+  # --------------------------------------------------------------- SNS / S3
+  DeliveryTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub skyvery-delivery-completed-${Stage}
+      Subscription:
+        - { Protocol: email, Endpoint: !Ref NotificationEmail }
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub skyvery-frontend-${AWS::AccountId}-${Stage}
+      WebsiteConfiguration: { IndexDocument: index.html }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub ${FrontendBucket.Arn}/*
+
+  # ------------------------------------------------------ API REST (HTTP API)
+  OrdersHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: ["*"]
+
+  OrdersApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambdas/orders_api/
+      Handler: app.handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref OrdersTable }
+      Events:
+        CreateOrder:
+          Type: HttpApi
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders, Method: POST }
+        GetOrder:
+          Type: HttpApi
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders/{orderId}, Method: GET }
+        ListByZone:
+          Type: HttpApi
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: /zones/{zone}/orders, Method: GET }
+
+  CompleteDeliveryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambdas/complete_delivery/
+      Handler: app.handler
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref OrdersTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref DeliveryHistoryTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref DriversTable }
+        - SNSPublishMessagePolicy: { TopicName: !GetAtt DeliveryTopic.TopicName }
+      Events:
+        Complete:
+          Type: HttpApi
+          Properties: { ApiId: !Ref OrdersHttpApi, Path: /orders/{orderId}/complete, Method: POST }
+
+  # ------------------------------------------------ WebSocket API (Carlos/Oskar)
+  # TODO Carlos: AWS::ApiGatewayV2::Api (WEBSOCKET, $request.body.action),
+  #   rutas $connect / $disconnect, funciones ws_connect y ws_disconnect.
+  # TODO Oskar: ruta location-update + función location_update
+  #   (env WS_ENDPOINT y política execute-api:ManageConnections).
+
+Outputs:
+  OrdersApiUrl:
+    Value: !Sub https://${OrdersHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+  FrontendUrl:
+    Value: !GetAtt FrontendBucket.WebsiteURL
+  DeliveryTopicArn:
+    Value: !Ref DeliveryTopic
+  SubscriptionsTableName:
+    Value: !Ref SubscriptionsTable
+  DriverLocationsTableName:
+    Value: !Ref DriverLocationsTable

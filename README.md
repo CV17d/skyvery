@@ -70,9 +70,9 @@ docs/evidencias/             # capturas, logs 429, resultados de pruebas
 - [ ] Integrar el trabajo de todos, revisar PRs y mantener este README.
 
 ### Carlos — API Gateway WebSocket y conexiones
-- [ ] Definir la **WebSocket API** con rutas `$connect`, `$disconnect` y `location-update` (`routeSelectionExpression: $request.body.action`).
-- [ ] `lambdas/ws_connect`: leer `orderId` del query string y guardar `{connectionId, orderId}` en `Subscriptions`.
-- [ ] `lambdas/ws_disconnect`: eliminar la suscripción.
+- [x] Definir la **WebSocket API** con rutas `$connect`, `$disconnect` y `location-update` (`routeSelectionExpression: $request.body.action`).
+- [x] `lambdas/ws_connect`: leer `orderId` del query string y guardar `{connectionId, orderId}` en `Subscriptions`.
+- [x] `lambdas/ws_disconnect`: eliminar la suscripción.
 - [ ] Permisos IAM (`execute-api:ManageConnections`) y stage `prod`. Probar con `wscat`.
 
 ### Oskar — Ubicación en tiempo real y simulador

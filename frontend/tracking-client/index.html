@@ -151,6 +151,87 @@ const icono = L.divIcon({ className: "", html: '<div class="moto">🛵</div>', i
 let marcador = null;
 const rastro = L.polyline([], { color: "#e4572e", weight: 4, opacity: .75 }).addTo(mapa);
 
+let ultimoTs = 0;
+let conteo = 0;
+let entregado = false;
+
+function ponerEstado(clase, texto) {
+  $("estado").className = "estado " + clase;
+  $("estadoTexto").textContent = texto;
+}
+
+// Convierte el ts del mensaje a milisegundos (acepta segundos, ms o ISO).
+function tsAMilisegundos(ts) {
+  if (typeof ts === "number") return ts < 1e12 ? ts * 1000 : ts;
+  const n = Number(ts);
+  if (!Number.isNaN(n)) return n < 1e12 ? n * 1000 : n;
+  const d = Date.parse(ts);
+  return Number.isNaN(d) ? Date.now() : d;
+}
+
+// Procesa un mensaje {orderId, driverId, lat, lng, ts}
+function recibirUbicacion(m) {
+  // Defensa extra: el backend ya filtra, pero ignoramos otras órdenes.
+  if (m.orderId && m.orderId !== orderId) return;
+
+  const lat = Number(m.lat), lng = Number(m.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  // No retroceder en el tiempo si llega un mensaje desordenado.
+  const ts = tsAMilisegundos(m.ts);
+  if (ts < ultimoTs) return;
+  ultimoTs = ts;
+
+  const punto = [lat, lng];
+  if (!marcador) {
+    marcador = L.marker(punto, { icon: icono }).addTo(mapa);
+    mapa.setView(punto, 16);
+  } else {
+    marcador.setLatLng(punto);
+    if (!mapa.getBounds().pad(-0.2).contains(punto)) mapa.panTo(punto);
+  }
+  rastro.addLatLng(punto);
+
+  conteo++;
+  if (!entregado) {
+    $("titulo").textContent = "Tu pedido va en camino";
+    $("detalle").textContent = "El mapa se actualiza solo cada pocos segundos.";
+  }
+  $("repartidor").textContent = m.driverId || "—";
+  $("hora").textContent = new Date(ts).toLocaleTimeString("es-CO");
+  $("posicion").textContent = lat.toFixed(5) + ", " + lng.toFixed(5);
+  $("conteo").textContent = conteo;
+}
+
+function marcarEntregado() {
+  entregado = true;
+  $("titulo").textContent = "Pedido entregado ✓";
+  $("titulo").className = "entregado";
+  $("detalle").textContent = "Gracias por pedir con Skyvery.";
+}
+
+// ------------------------------------------------------------------ WebSocket
+let socket = null;
+
+function conectar() {
+  ponerEstado("conectando", "Conectando…");
+  const separador = wsUrl.includes("?") ? "&" : "?";
+  socket = new WebSocket(wsUrl + separador + "orderId=" + encodeURIComponent(orderId));
+
+  socket.onopen = () => {
+    ponerEstado("conectado", "En vivo");
+  };
+
+  socket.onmessage = (evento) => {
+    let datos;
+    try { datos = JSON.parse(evento.data); } catch { return; }
+    // Acepta el mensaje plano o envuelto en {data:{...}} / {location:{...}}
+    const m = datos.data || datos.location || datos;
+    if (m.status === "DELIVERED" || datos.status === "DELIVERED") marcarEntregado();
+    recibirUbicacion(m);
+  };
+}
+
 // --------------------------------------------------------------------- Inicio
 $("formOrden").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -165,6 +246,13 @@ if (!orderId) {
   $("etiquetaOrden").innerHTML = "Orden <b></b>";
   $("etiquetaOrden").querySelector("b").textContent = orderId;
   $("tarjeta").hidden = false;
+
+  if (!wsUrl) {
+    ponerEstado("caido", "Falta configurar WS_URL");
+    $("detalle").textContent = "Define WS_URL en index.html o agrega ?ws=wss://… a la dirección.";
+  } else {
+    conectar();
+  }
 }
 </script>
 </body>

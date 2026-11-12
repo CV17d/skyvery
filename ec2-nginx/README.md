@@ -72,3 +72,66 @@ Cuando el target aparezca **healthy**, abrir `http://<DNS-del-ALB>/` y debe carg
 En el panel, botón **Configuración**: pegar `OrdersApiUrl` y `FrontendUrl`
 (salidas de `sam deploy`). También se pueden dejar fijas en las constantes
 `API_URL` y `TRACKING_URL` al inicio de `frontend/ops-panel/index.html`.
+
+## 6. Repartidores para la demo (requisito de "Marcar entregada")
+
+El botón **Marcar entregada** llama a `POST /orders/{orderId}/complete`. Esa
+transacción exige que el repartidor **ya exista** en la tabla `Drivers`; si no
+existe, responde **409** y no se guarda nada. Por ahora la API no tiene
+endpoints para crear repartidores, así que hay que insertarlos a mano una vez
+desplegado el stack (la tabla se llama `skyvery-drivers-prod` con el stage por
+defecto):
+
+```bash
+aws dynamodb put-item --table-name skyvery-drivers-prod --item '{"driverId":{"S":"driver-1"},"deliveriesCount":{"N":"0"}}'
+```
+
+En PowerShell las comillas del JSON suelen dar problemas. Si falla, hacerlo
+desde la consola de AWS: DynamoDB > Tablas > `skyvery-drivers-prod` >
+Explorar elementos > Crear elemento, con `driverId` (cadena) y
+`deliveriesCount` (número) en 0.
+
+Usar el **mismo `driverId`** al crear la orden en el panel, para que el botón
+"Marcar entregada" lo envíe tal cual.
+
+Pendiente (Cristian, cuando la rama de la WebSocket API esté en `main`):
+`POST /drivers`, `GET /drivers/{driverId}` y `GET /drivers`. Con esos endpoints
+se puede agregar al panel una sección para crear y listar repartidores, y
+cambiar el campo de texto del repartidor por una lista desplegable. Mientras
+tanto el panel no necesita cambios.
+
+## 7. Publicar la página de seguimiento en S3
+
+El bucket lo crea la plantilla SAM (`skyvery-frontend-<cuenta>-prod`).
+Antes de subir, poner la URL del WebSocket en la constante `WS_URL` de
+`frontend/tracking-client/index.html`.
+
+```bash
+aws s3 cp frontend/tracking-client/index.html s3://skyvery-frontend-<cuenta>-prod/index.html
+```
+
+Abrir `<FrontendUrl>/index.html?orderId=<id>`.
+Para probar el mapa sin backend: `index.html?orderId=prueba&demo=1`.
+
+## 8. Cómo funciona el rate limiting (para la sustentación)
+
+- `limit_req_zone $binary_remote_addr zone=perip:10m rate=10r/s;`
+  lleva la cuenta por IP: 10 peticiones por segundo.
+- `limit_req zone=perip burst=20 nodelay;`
+  admite una ráfaga de 20 peticiones extra y las atiende de inmediato.
+- `limit_req_status 429;` lo que pase de ahí recibe **429 Too Many Requests**.
+- `real_ip_header X-Forwarded-For` + `set_real_ip_from <red privada>`:
+  detrás del ALB todas las peticiones llegan con la IP del balanceador. Con
+  esto NGINX toma la IP real del cliente que el ALB escribe en la cabecera
+  `X-Forwarded-For`; sin esto, todos los usuarios compartirían un solo límite.
+- `/health` no tiene límite, para que el ALB nunca marque la instancia como caída
+  durante la prueba de carga.
+
+## 9. Actualizar después de un cambio
+
+```bash
+cd /opt/skyvery && sudo git pull
+sudo cp ec2-nginx/nginx.conf /etc/nginx/nginx.conf
+sudo cp -r frontend/ops-panel/. /usr/share/nginx/html/ops-panel/
+sudo nginx -t && sudo systemctl reload nginx
+```

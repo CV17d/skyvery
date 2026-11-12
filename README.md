@@ -99,6 +99,7 @@ python -m pytest -q tests
 | API REST (`OrdersApiUrl`) | `https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod` |
 | Página de seguimiento (`FrontendUrl`) | `http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com` (vacía hasta que Sebas suba el `index.html`) |
 | Tema SNS | `skyvery-delivery-completed-prod` |
+| Panel de operaciones (ALB → EC2 NGINX) | `http://skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com/` (stack `skyvery-ops`, plantilla `infra/ec2-alb.yaml`) |
 
 Datos de prueba ya creados: repartidor `DRV-1`; órdenes `ORD-A` (zona `centro`, ya `DELIVERED`) y `ORD-B` (zona `norte`, `PENDING`).
 Para sus pruebas creen órdenes nuevas, por ejemplo:
@@ -108,7 +109,8 @@ curl -X POST https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod/orders 
 ```
 
 - **Solo Cristian opera AWS** (perfil `skyvery`). Carlos, Oskar y Sebas trabajan únicamente en GitHub (rama propia + PR a `main`); no necesitan cuenta de AWS.
-- Al terminar la demo: `sam delete --stack-name skyvery-prod --profile skyvery` y terminar la EC2 y el ALB.
+- Al terminar la demo, borrar todo para no generar costos (la EC2 y el ALB cobran por hora):
+  `aws cloudformation delete-stack --stack-name skyvery-ops --profile skyvery` y `sam delete --stack-name skyvery-prod --profile skyvery`.
 
 Cada evidencia (captura o log) se guarda en `docs/evidencias/` con el nombre indicado.
 
@@ -117,8 +119,8 @@ Cada evidencia (captura o log) se guarda en `docs/evidencias/` con el nombre ind
 - [x] Confirmar la suscripción SNS en el correo.
 - [x] Crear repartidor y órdenes de prueba en dos zonas; probar la transacción (éxito y fallo con 409).
 - [ ] Subir la página de seguimiento al bucket S3 (cuando Sebas ponga las URL).
-- [ ] Lanzar la EC2 con `ec2-nginx/user-data.sh`, crear target group + ALB y verificar `/health`.
-- [ ] Prueba de carga con `loadtest/carga.py` contra el ALB y sacar los 429 del log de NGINX.
+- [x] Lanzar la EC2 con NGINX, target group + ALB (`infra/ec2-alb.yaml`) y verificar `/health` (target *healthy*).
+- [x] Prueba de carga con `loadtest/carga.py` contra el ALB (50 req/s, 10 s → 119 aceptadas, 381 con 429) y 429 del log de NGINX (`docs/evidencias/11-carga-resumen.txt`, `12-nginx-429.txt`).
 - [ ] Ejecutar el simulador y `wscat` contra el stack para las evidencias del WebSocket.
 - [ ] Tomar las capturas de la lista de evidencias (sección 8).
 

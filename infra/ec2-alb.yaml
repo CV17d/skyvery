@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Skyvery - panel de operaciones en EC2 (NGINX con rate limiting) detras de un ALB
+
+# Despliegue:
+#   aws cloudformation deploy --stack-name skyvery-ops --template-file infra/ec2-alb.yaml \
+#     --capabilities CAPABILITY_IAM --parameter-overrides VpcId=vpc-... SubnetIds=subnet-a,subnet-b
+# Borrar:  aws cloudformation delete-stack --stack-name skyvery-ops
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Al menos dos subredes publicas en zonas distintas
+  InstanceType:
+    Type: String
+    Default: t3.micro
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Skyvery ALB - HTTP desde internet
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Skyvery EC2 - HTTP solo desde el ALB
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, SourceSecurityGroupId: !Ref AlbSecurityGroup }
+
+  # Sin SSH: los logs de NGINX se leen con SSM (Session Manager / send-command)
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  OpsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Select [0, !Ref SubnetIds]
+      SecurityGroupIds: [!Ref InstanceSecurityGroup]
+      Tags:
+        - { Key: Name, Value: skyvery-ops-panel }
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          exec > >(tee /var/log/skyvery-user-data.log) 2>&1
+          dnf install -y nginx git
+          rm -rf /opt/skyvery
+          git clone --depth 1 --branch main https://github.com/CV17d/skyvery.git /opt/skyvery
+          mkdir -p /usr/share/nginx/html/ops-panel
+          cp -r /opt/skyvery/frontend/ops-panel/. /usr/share/nginx/html/ops-panel/
+          chown -R nginx:nginx /usr/share/nginx/html/ops-panel
+          cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.original
+          cp /opt/skyvery/ec2-nginx/nginx.conf /etc/nginx/nginx.conf
+          nginx -t
+          systemctl enable nginx
+          systemctl restart nginx
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: skyvery-ops-tg
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 80
+      TargetType: instance
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 15
+      HealthyThresholdCount: 2
+      Targets:
+        - { Id: !Ref OpsInstance, Port: 80 }
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: skyvery-ops-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets: !Ref SubnetIds
+      SecurityGroups: [!Ref AlbSecurityGroup]
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - { Type: forward, TargetGroupArn: !Ref TargetGroup }
+
+Outputs:
+  OpsPanelUrl:
+    Value: !Sub http://${LoadBalancer.DNSName}/
+  InstanceId:
+    Value: !Ref OpsInstance
+  TargetGroupArn:
+    Value: !Ref TargetGroup

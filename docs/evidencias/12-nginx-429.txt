@@ -1,0 +1,26 @@
+Total 429: 381  Total 200: 120
+
+--- access.log (primeros 429) ---
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:03 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:04 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+181.50.x.x - [12/Nov/2026:23:49:04 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="181.50.x.x"
+
+--- error.log (limit_req) ---
+2026/11/12 23:49:03 [warn] 4551#4551: *4 limiting requests, excess: 20.270 by zone "perip", client: 181.50.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com"
+2026/11/12 23:49:03 [warn] 4551#4551: *6 limiting requests, excess: 20.860 by zone "perip", client: 181.50.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com"
+2026/11/12 23:49:03 [warn] 4551#4551: *4 limiting requests, excess: 20.810 by zone "perip", client: 181.50.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com"
+2026/11/12 23:49:03 [warn] 4551#4551: *3 limiting requests, excess: 20.310 by zone "perip", client: 181.50.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com"
+2026/11/12 23:49:03 [warn] 4551#4551: *4 limiting requests, excess: 20.290 by zone "perip", client: 181.50.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com"
+

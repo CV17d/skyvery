@@ -1,0 +1,13 @@
+Skyvery - prueba de carga (rate limiting NGINX: 10 req/s, burst 20)
+Fecha:        2026-11-12 18:48:24
+URL:          http://skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com/
+Ritmo:        50 req/s durante 10 s
+Enviadas:     500 en 10.2 s (49.2 req/s reales)
+
+Respuestas por código:
+  200:   119  (23.8 %)
+  429:   381  (76.2 %)
+
+Aceptadas (200):  119
+Limitadas (429):  381
+Esperado aprox.:  120 aceptadas (burst 20 + 10 req/s x 10 s)

@@ -1,0 +1,24 @@
+Skyvery - Evidencia: consultas por GSI (zona geográfica) (2026-11-12 18:58)
+
+== GET /zones/centro/orders  (GSI zone-status-index) ==
+count 3
+  ORD-PASTO-1 DELIVERED DRV-2
+  ORD-A DELIVERED DRV-1
+  ORD-PASTO-2 IN_TRANSIT DRV-1
+
+== GET /zones/centro/orders?status=IN_TRANSIT ==
+count 1
+  ORD-PASTO-2 IN_TRANSIT
+
+== GET /zones/centro/orders?status=DELIVERED ==
+count 2
+  ORD-PASTO-1 DELIVERED
+  ORD-A DELIVERED
+
+== GET /areas/d21nc/drivers  (GSI geohash-index, celda ~5 km de Pasto) ==
+count 2
+  DRV-1 d21nckvte 1794526667 1.2136 -77.2811
+  DRV-2 d21ncjxj4 1794527883 1.2176 -77.2901
+
+== GET /areas/d2g6f/drivers  (otra celda: sin repartidores) ==
+{"geohashPrefix": "d2g6f", "count": 0, "items": []}

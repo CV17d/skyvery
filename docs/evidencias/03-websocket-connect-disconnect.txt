@@ -1,0 +1,14 @@
+Skyvery - Evidencia: rutas $connect / $disconnect y tabla Subscriptions (GSI orderId-index) 2026-11-12 18:59
+
+== 1) $connect SIN orderId -> debe rechazarse ==
+Conexión rechazada, HTTP 400
+
+== 2) $connect del repartidor (?role=driver) -> se acepta sin suscripción ==
+Conexión aceptada
+
+== 3) Dos clientes siguiendo ORD-DEMO-WS ==
+Query GSI orderId-index (orderId = ORD-DEMO-WS): 2 conexiones ['ggjAoI6xBQAYKEifSA==', 'ggjAoS8TCQAYKEiaYA==']
+
+== 4) $disconnect de un cliente -> su suscripción se borra ==
+Después de cerrar 1: 1 conexiones ['ggjAoS8TCQAYKEiaYA==']
+Después de cerrar ambas: 0 conexiones

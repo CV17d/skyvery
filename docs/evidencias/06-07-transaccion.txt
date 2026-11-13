@@ -1,0 +1,73 @@
+Skyvery - Evidencia: transacción DynamoDB (TransactWriteItems) (2026-11-12 18:58)
+
+== Estado ANTES ==
+-- DRV-2 en skyvery-drivers-prod:
+{
+    "createdAt": "2026-11-12T23:55:33.378137+00:00",
+    "name": "Repartidor 2",
+    "deliveriesCount": 0,
+    "driverId": "DRV-2"
+}
+-- ORD-PASTO-1:
+{
+    "createdAt": "2026-11-12T23:55:33.758520+00:00",
+    "zone": "centro",
+    "customer": "Cliente Demo",
+    "orderId": "ORD-PASTO-1",
+    "driverId": "DRV-2",
+    "status": "IN_TRANSIT"
+}
+
+== CASO 1: entrega fallida (repartidor inexistente) -> POST /orders/ORD-PASTO-2/complete {driverId: NO-EXISTE} ==
+{"error": "Transacci\u00f3n cancelada, nada se guard\u00f3", "reasons": ["None", "None", "ConditionalCheckFailed"]}
+HTTP 409
+-- ORD-PASTO-2 después (debe seguir IN_TRANSIT):
+{
+    "orderId": "ORD-PASTO-2",
+    "customer": "Otro cliente",
+    "driverId": "DRV-1",
+    "createdAt": "2026-11-12T23:55:34.162575+00:00",
+    "zone": "centro",
+    "status": "IN_TRANSIT"
+}
+-- Historial de ORD-PASTO-2 (debe estar vacío):
+0
+-- Repartidor NO-EXISTE (no se creó):
+{"error": "no existe"} HTTP 404
+
+== CASO 2: entrega exitosa -> POST /orders/ORD-PASTO-1/complete {driverId: DRV-2} ==
+{"orderId": "ORD-PASTO-1", "status": "DELIVERED", "deliveredAt": "2026-11-12T23:59:41.046143+00:00"}
+HTTP 200
+
+== Estado DESPUÉS (las 3 operaciones se aplicaron juntas) ==
+-- 1) Orden:
+{
+    "orderId": "ORD-PASTO-1",
+    "zone": "centro",
+    "status": "DELIVERED",
+    "customer": "Cliente Demo",
+    "deliveredAt": "2026-11-12T23:59:41.046143+00:00",
+    "createdAt": "2026-11-12T23:55:33.758520+00:00",
+    "driverId": "DRV-2"
+}
+-- 2) Historial:
+[
+    {
+        "orderId": "ORD-PASTO-1",
+        "deliveredAt": "2026-11-12T23:59:41.046143+00:00",
+        "driverId": "DRV-2"
+    }
+]
+-- 3) Contador del repartidor:
+{
+    "deliveriesCount": 1,
+    "name": "Repartidor 2",
+    "createdAt": "2026-11-12T23:55:33.378137+00:00",
+    "driverId": "DRV-2"
+}
+
+== CASO 3: repetir la entrega de ORD-PASTO-1 (ya DELIVERED) ==
+{"error": "Transacci\u00f3n cancelada, nada se guard\u00f3", "reasons": ["ConditionalCheckFailed", "None", "None"]}
+HTTP 409
+-- deliveriesCount de DRV-2 (sigue en 1):
+1

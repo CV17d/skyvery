@@ -1,0 +1,39 @@
+Skyvery - Evidencia: broadcast filtrado y conditional write (2026-11-12 18:58)
+
+== Simulador (repartidor DRV-2, orden ORD-PASTO-1, ruta Pasto, --stale-after 3) ==
+Conectando a wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod?role=driver ...
+[1/9] ts=1794527862 lat=1.2142 lng=-77.2784 ok
+[2/9] ts=1794527865 lat=1.2148 lng=-77.2801 ok
+[3/9] ts=1794527868 lat=1.2153 lng=-77.2819 ok
+[4/9] ts=1794527808 lat=1.2142 lng=-77.2784 VIEJO (debe descartarse)
+[5/9] ts=1794527871 lat=1.2159 lng=-77.2836 ok
+[6/9] ts=1794527874 lat=1.2164 lng=-77.2853 ok
+[7/9] ts=1794527877 lat=1.2169 lng=-77.287 ok
+[8/9] ts=1794527880 lat=1.2172 lng=-77.2886 ok
+[9/9] ts=1794527883 lat=1.2176 lng=-77.2901 ok
+Ruta completada.
+
+== Clientes WebSocket conectados ==
+Cliente siguiendo ORD-PASTO-1 recibió 7 mensajes (el listener se cerrÃ³ antes del Ãºltimo envÃ­o; "sent": 2 = este cliente + la pÃ¡gina de seguimiento abierta en el navegador); ts: [1794527862, 1794527865, 1794527868, 1794527871, 1794527874, 1794527877, 1794527880]
+Cliente siguiendo ORD-PASTO-2 recibió 0 mensajes (broadcast filtrado por orderId)
+
+== CloudWatch Logs: /aws/lambda/skyvery-prod-LocationUpdateFunction ==
+{"status": "ok", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527862, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527865, "sent": 2, "removed": 0}
+{"status": "ignored", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527808, "reason": "stale"}
+{"status": "ok", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527868, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527871, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527874, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527877, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527880, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-PASTO-1", "driverId": "DRV-2", "ts": 1794527883, "sent": 2, "removed": 0}
+
+== DynamoDB skyvery-driver-locations-prod, item DRV-2 (queda el ts mÃ¡s nuevo) ==
+{
+    "ts": "1794527883",
+    "lat": "1.2176",
+    "lng": "-77.2901",
+    "geohash": "d21ncjxj4",
+    "geohashPrefix": "d21nc",
+    "orderId": "ORD-PASTO-1"
+}

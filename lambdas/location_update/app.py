@@ -184,7 +184,15 @@ def handler(event, context):
     item = save_if_newer(msg)
     if item is None:
         # Timestamp viejo o repetido: se descarta en silencio, sin broadcast.
+        _log("ignored", msg, reason="stale")
         return _resp(200, {"status": "ignored", "reason": "stale"})
 
     sent, gone = broadcast(event, item)
+    _log("ok", msg, sent=sent, removed=gone)
     return _resp(200, {"status": "ok", "sent": sent, "removed": gone})
+
+
+def _log(status, msg, **extra):
+    """Una línea JSON por mensaje en CloudWatch (evidencia de aceptados/descartados)."""
+    print(json.dumps({"status": status, "orderId": msg["orderId"], "driverId": msg["driverId"],
+                      "ts": msg["ts"], **extra}, default=_json_default))

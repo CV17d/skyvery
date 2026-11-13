@@ -48,18 +48,20 @@ Reglas clave:
 
 ```
 infra/template.yaml          # AWS SAM: tablas, Lambdas, WebSocket API, HTTP API, SNS, S3
+infra/ec2-alb.yaml           # CloudFormation: EC2 con NGINX + target group + ALB
 lambdas/ws_connect/          # $connect   → guarda {connectionId, orderId}
 lambdas/ws_disconnect/       # $disconnect→ borra la suscripción
 lambdas/location_update/     # location-update → conditional write + broadcast
 lambdas/complete_delivery/   # transacción + publicación SNS
 lambdas/orders_api/          # API REST: órdenes por zona, repartidores, repartidores por área
-simulator/driver_sim.py      # repartidor simulado (GPS cada 5 s)
+simulator/driver_sim.py      # repartidor simulado (GPS cada 5 s, rutas bogota/pasto)
+simulator/cliente_ws.py      # cliente WebSocket de consola (sigue una orden)
 frontend/tracking-client/    # página del cliente (S3 static website + mapa Leaflet)
 frontend/ops-panel/          # panel de operaciones (servido por NGINX en EC2)
 ec2-nginx/                   # nginx.conf + user-data + guía EC2/ALB
 loadtest/                    # prueba de carga (carga.py)
 tests/                       # pruebas locales (sin AWS)
-docs/                        # websocket.md, location.md, evidencias/
+docs/                        # demo.md (guion), guia-estudio.md, websocket.md, location.md, evidencias/
 ```
 
 ### API REST (`OrdersApiUrl`)
@@ -80,62 +82,38 @@ pip install pytest boto3 moto websockets
 python -m pytest -q tests
 ```
 
-## 5. Reparto de trabajo
+## 5. Reparto de trabajo y estado
 
-### Etapa 1 — Código (terminada ✅)
+**Proyecto terminado ✅** — código, despliegue en AWS, pruebas reales y evidencias. No quedan tareas asignadas.
 
-- **Cristian**: plantilla SAM (tablas + GSI, SNS, S3, HTTP API), `complete_delivery` (transacción), `orders_api` (órdenes por zona, repartidores, repartidores por área), pruebas e integración.
-- **Carlos**: WebSocket API (`$connect`, `$disconnect`, `location-update`), `ws_connect`, `ws_disconnect`, permisos, stage y pruebas.
-- **Oskar**: `location_update` (conditional write, geohash, broadcast filtrado, limpieza `410 Gone`), simulador y pruebas.
-- **Sebas**: NGINX con rate limiting, `user-data.sh`, guía EC2/ALB, página de seguimiento, panel de operaciones y `loadtest/carga.py`.
+| Integrante | Aporte |
+|---|---|
+| **Cristian** | Plantilla SAM (5 tablas + GSI, SNS, S3, HTTP API), `complete_delivery` (transacción), `orders_api` (órdenes por zona, repartidores, repartidores por área geohash), plantilla EC2 + ALB, despliegue en AWS, demo en vivo, evidencias, integración y coordinación |
+| **Carlos** | WebSocket API (`$connect`, `$disconnect`, `location-update`), `ws_connect`, `ws_disconnect`, permisos IAM, stage, pruebas y `docs/websocket.md` |
+| **Oskar** | `location_update` (conditional write, geohash, broadcast filtrado, limpieza `410 Gone`), simulador del repartidor, pruebas de integración y `docs/location.md` |
+| **Sebas** | `nginx.conf` con rate limiting e IP real tras el ALB, `user-data.sh`, guía EC2/ALB, página de seguimiento (Leaflet), panel de operaciones y `loadtest/carga.py` |
 
-### Etapa 2 — Despliegue, pruebas reales y evidencias (en curso)
-
-#### Stack desplegado (`skyvery-prod`, us-east-1)
+### Stack desplegado (us-east-1, perfil `skyvery`)
 
 | Recurso | URL / valor |
 |---|---|
 | WebSocket (`WebSocketUrl`) | `wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod` |
 | API REST (`OrdersApiUrl`) | `https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod` |
-| Página de seguimiento (`FrontendUrl`) | `http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com` (vacía hasta que Sebas suba el `index.html`) |
-| Tema SNS | `skyvery-delivery-completed-prod` |
-| Panel de operaciones (ALB → EC2 NGINX) | `http://skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com/` (stack `skyvery-ops`, plantilla `infra/ec2-alb.yaml`) |
+| Página de seguimiento (S3) | `http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com/index.html?orderId=<orden>` |
+| Panel de operaciones (ALB → EC2 NGINX) | `http://skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com/` |
+| Tema SNS | `skyvery-delivery-completed-prod` (correo confirmado) |
+| Stacks | `skyvery-prod` (SAM) y `skyvery-ops` (EC2 + ALB) |
 
-Datos de prueba ya creados: repartidor `DRV-1`; órdenes `ORD-A` (zona `centro`, ya `DELIVERED`) y `ORD-B` (zona `norte`, `PENDING`).
-Para sus pruebas creen órdenes nuevas, por ejemplo:
+Solo Cristian opera AWS (perfil `skyvery`). La EC2 no tiene SSH: se administra con SSM (Session Manager).
 
+**Guion de la demo:** [`docs/demo.md`](docs/demo.md) · **Guía de estudio:** [`docs/guia-estudio.md`](docs/guia-estudio.md)
+
+**Al terminar la presentación, borrar todo** (la EC2 y el ALB cobran por hora; ver `docs/demo.md`):
 ```bash
-curl -X POST https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod/orders -H "Content-Type: application/json" -d '{"orderId":"ORD-10","zone":"centro","driverId":"DRV-1"}'
+aws cloudformation delete-stack --profile skyvery --stack-name skyvery-ops
+aws s3 rm s3://skyvery-frontend-485530831247-prod --recursive --profile skyvery
+sam delete --profile skyvery --stack-name skyvery-prod --no-prompts
 ```
-
-- **Solo Cristian opera AWS** (perfil `skyvery`). Carlos, Oskar y Sebas trabajan únicamente en GitHub (rama propia + PR a `main`); no necesitan cuenta de AWS.
-- Al terminar la demo, borrar todo para no generar costos (la EC2 y el ALB cobran por hora):
-  `aws cloudformation delete-stack --stack-name skyvery-ops --profile skyvery` y `sam delete --stack-name skyvery-prod --profile skyvery`.
-
-Cada evidencia (captura o log) se guarda en `docs/evidencias/` con el nombre indicado.
-
-**Cristian — todo lo que se hace en AWS**
-- [x] `sam deploy` del stack y compartir las URL con el grupo.
-- [x] Confirmar la suscripción SNS en el correo.
-- [x] Crear repartidor y órdenes de prueba en dos zonas; probar la transacción (éxito y fallo con 409).
-- [ ] Subir la página de seguimiento al bucket S3 (cuando Sebas ponga las URL).
-- [x] Lanzar la EC2 con NGINX, target group + ALB (`infra/ec2-alb.yaml`) y verificar `/health` (target *healthy*).
-- [x] Prueba de carga con `loadtest/carga.py` contra el ALB (50 req/s, 10 s → 119 aceptadas, 381 con 429) y 429 del log de NGINX (`docs/evidencias/11-carga-resumen.txt`, `12-nginx-429.txt`).
-- [ ] Ejecutar el simulador y `wscat` contra el stack para las evidencias del WebSocket.
-- [ ] Tomar las capturas de la lista de evidencias (sección 8).
-
-**Carlos — GitHub**
-- [ ] `docs/demo.md`: guion paso a paso de la demo (qué se muestra, en qué orden, qué comando o pantalla y qué requisito cumple), usando las URL de esta sección.
-
-**Oskar — GitHub**
-- [ ] Opción `--route pasto` en `simulator/driver_sim.py` con una ruta en Pasto, para que coincida con el centro del mapa de la página de seguimiento (mantener la ruta de Bogotá por defecto y actualizar sus pruebas).
-
-**Sebas — GitHub**
-- [ ] Poner `WS_URL`/`API_URL` en `frontend/tracking-client/index.html` y `API_URL`/`TRACKING_URL` en `frontend/ops-panel/index.html` con las URL de esta sección.
-- [ ] Sección de repartidores en el panel (`POST /drivers`, `GET /drivers`) y lista desplegable al marcar una orden como entregada.
-
-**Todos**
-- [ ] Ensayar la demo completa (sección 8).
 
 ## 6. Plan por fases
 
@@ -147,24 +125,25 @@ Cada evidencia (captura o log) se guarda en `docs/evidencias/` con el nombre ind
 | 4 | location_update + simulador | Oskar | ✅ |
 | 5 | complete_delivery (transacción) + orders_api | Cristian | ✅ |
 | 6 | NGINX + EC2 + frontends + prueba de carga (código) | Sebas | ✅ |
-| 7 | Despliegue en AWS, evidencias y demo final | Todos | ⏳ |
+| 7 | Despliegue en AWS, EC2 + ALB, evidencias, guion y guía | Cristian | ✅ |
 
 ## 7. Flujo de trabajo Git
 - Cada integrante trabaja en su rama (`feat/websocket`, `feat/location`, `feat/nginx`, ...) y abre PR hacia `main`.
 - Nunca subir credenciales AWS, `.pem` ni `.env`.
 
-## 8. Requisitos para la demo y evidencias
+## 8. Requisitos y evidencias
 
-| # | Requisito | Captura (`docs/evidencias/`) |
+Evidencias generadas contra el stack real (carpeta `docs/evidencias/`):
+
+| Requisito del enunciado | Cómo se cumple | Evidencia |
 |---|---|---|
-| 1 | Stack desplegado | `01-stack-outputs.png`: CloudFormation → `skyvery-prod` → Salidas |
-| 2 | WebSocket con 3 rutas | `02-websocket-rutas.png`: API Gateway → `skyvery-ws-prod` → Rutas (`$connect`, `$disconnect`, `location-update`) |
-| 3 | Suscripciones con GSI | `03-subscriptions-gsi.png`: DynamoDB → `skyvery-subscriptions-prod` → Índices (`orderId-index`) y elementos con dos clientes conectados |
-| 4 | Broadcast filtrado | `04-broadcast-filtrado.png`: dos navegadores/`wscat` siguiendo órdenes distintas; cada uno recibe solo la suya |
-| 5 | Conditional write | `05-ts-viejo-descartado.png`: simulador con `--stale-after 3` + log de CloudWatch de `location_update` con `ignored/stale` y la tabla `DriverLocations` con el `ts` más nuevo |
-| 6 | Transacción exitosa | `06-entrega-ok.png`: respuesta 200 + orden `DELIVERED` + registro en `DeliveryHistory` + `deliveriesCount` aumentado |
-| 7 | Transacción fallida | `07-entrega-409.png`: respuesta 409 con repartidor inexistente + la orden sigue `PENDING` y no hay historial |
-| 8 | Confirmación SNS | `08-correo-sns.png`: correo "pedido … entregado" |
-| 9 | GSI por zona geográfica | `09-gsi-zona.png`: `GET /zones/{zone}/orders` y `GET /areas/{geohashPrefix}/drivers` |
-| 10 | Panel en EC2 detrás del ALB | `10-panel-alb.png`: panel abierto con la URL del ALB + target group *healthy* |
-| 11 | Rate limiting | `11-carga-resumen.txt` (salida de `carga.py`) y `12-nginx-429.txt` (`grep " 429 " /var/log/nginx/access.log`) |
+| WebSocket con `$connect`, `$disconnect` y `location-update` | API Gateway WebSocket, `routeSelectionExpression = $request.body.action` | `03-websocket-connect-disconnect.txt` |
+| Tabla de suscripciones `{orderId, connectionId}` con GSI por `orderId` | `Subscriptions` + `orderId-index`; `$connect` inserta, `$disconnect` borra | `03-websocket-connect-disconnect.txt` |
+| Broadcast solo a quienes siguen la orden | `Query` al GSI + `postToConnection` por conexión | `05-broadcast-y-ts-viejo.txt` |
+| Conditional write por timestamp, descarte silencioso | `attribute_not_exists(ts) OR ts < :newTs`; `ConditionalCheckFailed` → 200 `ignored` | `05-broadcast-y-ts-viejo.txt` (CloudWatch + DynamoDB) |
+| Transacción atómica de 3 operaciones | `TransactWriteItems` (orden, historial, contador) | `06-07-transaccion.txt` (éxito, fallo 409, repetición 409) |
+| SNS al completar la entrega | `sns.publish` tras la transacción | Correo en cj29772@gmail.com |
+| GSI para consultas por zona geográfica | `zone-status-index` (Orders) y `geohash-index` (DriverLocations) | `09-gsi-zona.txt` |
+| NGINX en EC2 con rate limiting 10 r/s, burst 20 | `limit_req_zone … rate=10r/s`, `burst=20 nodelay`, `limit_req_status 429`, IP real vía `X-Forwarded-For` | `11-carga-resumen.txt` (119×200, 381×429), `12-nginx-429.txt` |
+
+Capturas de pantalla opcionales para las diapositivas: salidas de CloudFormation, rutas del WebSocket, índices de DynamoDB, el mapa en vivo, el correo SNS, el target group *healthy* y el panel.

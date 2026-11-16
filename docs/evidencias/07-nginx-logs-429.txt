@@ -1,0 +1,34 @@
+$ grep -c " 429 " /var/log/nginx/access.log
+379
+$ grep -c " 200 " /var/log/nginx/access.log
+122
+
+$ grep " 429 " /var/log/nginx/access.log | tail -n 14
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:36 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:37 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:37 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:37 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:37 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+190.107.x.x - [16/Nov/2026:01:43:37 +0000] "GET / HTTP/1.1" 429 61 limit=REJECTED xff="190.107.x.x"
+
+$ grep limiting /var/log/nginx/error.log | tail -n 5
+2026/11/16 01:43:37 [warn] 4819#4819: *25 limiting requests, excess: 20.040 by zone "perip", client: 190.107.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com"
+2026/11/16 01:43:37 [warn] 4819#4819: *29 limiting requests, excess: 20.960 by zone "perip", client: 190.107.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com"
+2026/11/16 01:43:37 [warn] 4819#4819: *25 limiting requests, excess: 20.660 by zone "perip", client: 190.107.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com"
+2026/11/16 01:43:37 [warn] 4819#4819: *34 limiting requests, excess: 20.080 by zone "perip", client: 190.107.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com"
+2026/11/16 01:43:37 [warn] 4819#4819: *34 limiting requests, excess: 20.740 by zone "perip", client: 190.107.x.x, server: _, request: "GET / HTTP/1.1", host: "skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com"
+
+$ grep -n limit_req /etc/nginx/nginx.conf
+31:                       'limit=$limit_req_status xff="$http_x_forwarded_for"';
+48:    limit_req_zone $binary_remote_addr zone=perip:10m rate=10r/s;
+49:    limit_req_status 429;
+50:    limit_req_log_level warn;
+71:            limit_req zone=perip burst=20 nodelay;

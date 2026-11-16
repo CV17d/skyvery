@@ -1,0 +1,25 @@
+Conectando a wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod?role=driver ...
+[1/9] ts=1794793287 lat=1.2142 lng=-77.2784 ok
+[2/9] ts=1794793292 lat=1.2148 lng=-77.2801 ok
+[3/9] ts=1794793297 lat=1.2153 lng=-77.2819 ok
+[4/9] ts=1794793237 lat=1.2142 lng=-77.2784 VIEJO (debe descartarse)
+[5/9] ts=1794793302 lat=1.2159 lng=-77.2836 ok
+[6/9] ts=1794793307 lat=1.2164 lng=-77.2853 ok
+[7/9] ts=1794793312 lat=1.2169 lng=-77.287 ok
+[8/9] ts=1794793317 lat=1.2172 lng=-77.2886 ok
+[9/9] ts=1794793322 lat=1.2176 lng=-77.2901 ok
+Ruta completada.
+
+== cliente 1 ==
+Siguiendo la orden ORD-EV-1 en wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod  (Ctrl+C para salir)
+[20:41:27] DRV-EV -> lat=1.2142 lng=-77.2784 geohash=d21ncmp94
+[20:41:32] DRV-EV -> lat=1.2148 lng=-77.2801 geohash=d21ncmnke
+[20:41:37] DRV-EV -> lat=1.2153 lng=-77.2819 geohash=d21ncmjp9
+[20:41:42] DRV-EV -> lat=1.2159 lng=-77.2836 geohash=d21ncm7g1
+[20:41:47] DRV-EV -> lat=1.2164 lng=-77.2853 geohash=d21ncm6w1
+[20:41:52] DRV-EV -> lat=1.2169 lng=-77.287 geohash=d21ncm92f
+[20:41:57] DRV-EV -> lat=1.2172 lng=-77.2886 geohash=d21ncm84t
+[20:42:02] DRV-EV -> lat=1.2176 lng=-77.2901 geohash=d21ncjxj4
+
+== cliente 2 ==
+Siguiendo la orden ORD-EV-2 en wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod  (Ctrl+C para salir)

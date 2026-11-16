@@ -100,7 +100,7 @@ python -m pytest -q tests
 | WebSocket (`WebSocketUrl`) | `wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod` |
 | API REST (`OrdersApiUrl`) | `https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod` |
 | Página de seguimiento (S3) | `http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com/index.html?orderId=<orden>` |
-| Panel de operaciones (ALB → EC2 NGINX) | `http://skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com/` |
+| Panel de operaciones (ALB → EC2 NGINX) | `http://skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com/` |
 | Tema SNS | `skyvery-delivery-completed-prod` (correo confirmado) |
 | Stacks | `skyvery-prod` (SAM) y `skyvery-ops` (EC2 + ALB) |
 
@@ -133,17 +133,17 @@ sam delete --profile skyvery --stack-name skyvery-prod --no-prompts
 
 ## 8. Requisitos y evidencias
 
-Evidencias generadas contra el stack real (carpeta `docs/evidencias/`):
+Capturas tomadas contra el stack real (carpeta `docs/evidencias/`). Las imágenes `01`–`10` se generaron a partir de la salida real de cada comando; `11`–`13` son capturas del navegador.
 
 | Requisito del enunciado | Cómo se cumple | Evidencia |
 |---|---|---|
-| WebSocket con `$connect`, `$disconnect` y `location-update` | API Gateway WebSocket, `routeSelectionExpression = $request.body.action` | `03-websocket-connect-disconnect.txt` |
-| Tabla de suscripciones `{orderId, connectionId}` con GSI por `orderId` | `Subscriptions` + `orderId-index`; `$connect` inserta, `$disconnect` borra | `03-websocket-connect-disconnect.txt` |
-| Broadcast solo a quienes siguen la orden | `Query` al GSI + `postToConnection` por conexión | `05-broadcast-y-ts-viejo.txt` |
-| Conditional write por timestamp, descarte silencioso | `attribute_not_exists(ts) OR ts < :newTs`; `ConditionalCheckFailed` → 200 `ignored` | `05-broadcast-y-ts-viejo.txt` (CloudWatch + DynamoDB) |
-| Transacción atómica de 3 operaciones | `TransactWriteItems` (orden, historial, contador) | `06-07-transaccion.txt` (éxito, fallo 409, repetición 409) |
-| SNS al completar la entrega | `sns.publish` tras la transacción | Correo en cj29772@gmail.com |
-| GSI para consultas por zona geográfica | `zone-status-index` (Orders) y `geohash-index` (DriverLocations) | `09-gsi-zona.txt` |
-| NGINX en EC2 con rate limiting 10 r/s, burst 20 | `limit_req_zone … rate=10r/s`, `burst=20 nodelay`, `limit_req_status 429`, IP real vía `X-Forwarded-For` | `11-carga-resumen.txt` (119×200, 381×429), `12-nginx-429.txt` |
-
-Capturas de pantalla opcionales para las diapositivas: salidas de CloudFormation, rutas del WebSocket, índices de DynamoDB, el mapa en vivo, el correo SNS, el target group *healthy* y el panel.
+| Broadcast solo a los clientes suscritos a ese `orderId` | `Query` al GSI `orderId-index` + `postToConnection` | [`01-broadcast-selectivo.png`](docs/evidencias/01-broadcast-selectivo.png), [`11-mapa-en-vivo.jpg`](docs/evidencias/11-mapa-en-vivo.jpg) |
+| Tabla de suscripciones `{orderId, connectionId}` con GSI | `Subscriptions` + `orderId-index`; `$connect` inserta, `$disconnect` borra | [`02-tabla-suscripciones-gsi.png`](docs/evidencias/02-tabla-suscripciones-gsi.png), [`09-dynamodb-gsi.png`](docs/evidencias/09-dynamodb-gsi.png), `14-websocket-connect-disconnect.txt` |
+| Conditional write: timestamp viejo descartado en silencio | `attribute_not_exists(ts) OR ts < :newTs`; CloudWatch `ignored/stale`, DynamoDB sin cambios | [`03-conditional-write.png`](docs/evidencias/03-conditional-write.png) |
+| Transacción atómica de 3 operaciones (`TransactWriteItems`) | Orden `DELIVERED` + historial + contador | [`04-transaccion-exitosa.png`](docs/evidencias/04-transaccion-exitosa.png), [`05-transaccion-fallida.png`](docs/evidencias/05-transaccion-fallida.png), [`12-pedido-entregado.jpg`](docs/evidencias/12-pedido-entregado.jpg) |
+| Prueba de carga (> 10–30 req/s) | `loadtest/carga.py` a 50 req/s contra el ALB | [`06-prueba-de-carga.png`](docs/evidencias/06-prueba-de-carga.png) |
+| Logs de NGINX con 429 | `access.log` y `error.log` de la EC2 | [`07-nginx-logs-429.png`](docs/evidencias/07-nginx-logs-429.png) |
+| Rutas `$connect`, `$disconnect`, `location-update` | API Gateway WebSocket `skyvery-ws-prod` | [`08-apigateway-rutas.png`](docs/evidencias/08-apigateway-rutas.png) |
+| Endpoints públicos y ALB | Salidas de CloudFormation y target group *healthy* | [`10-endpoints.png`](docs/evidencias/10-endpoints.png), [`13-panel-operaciones-alb.jpg`](docs/evidencias/13-panel-operaciones-alb.jpg) |
+| GSI para consultas por zona geográfica | `zone-status-index` y `geohash-index` | `15-gsi-zona.txt` |
+| SNS al completar la entrega | `sns.publish` tras la transacción | Correo en cj29772@gmail.com (captura manual) |

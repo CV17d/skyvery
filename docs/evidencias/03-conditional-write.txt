@@ -1,0 +1,33 @@
+Conectando a wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod?role=driver ...
+[1/9] ts=1794793287 lat=1.2142 lng=-77.2784 ok
+[2/9] ts=1794793292 lat=1.2148 lng=-77.2801 ok
+[3/9] ts=1794793297 lat=1.2153 lng=-77.2819 ok
+[4/9] ts=1794793237 lat=1.2142 lng=-77.2784 VIEJO (debe descartarse)
+[5/9] ts=1794793302 lat=1.2159 lng=-77.2836 ok
+[6/9] ts=1794793307 lat=1.2164 lng=-77.2853 ok
+[7/9] ts=1794793312 lat=1.2169 lng=-77.287 ok
+[8/9] ts=1794793317 lat=1.2172 lng=-77.2886 ok
+[9/9] ts=1794793322 lat=1.2176 lng=-77.2901 ok
+Ruta completada.
+
+== CloudWatch ==
+{"status": "ok", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793287, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793292, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793297, "sent": 2, "removed": 0}
+{"status": "ignored", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793237, "reason": "stale"}
+{"status": "ok", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793302, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793307, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793312, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793317, "sent": 2, "removed": 0}
+{"status": "ok", "orderId": "ORD-EV-1", "driverId": "DRV-EV", "ts": 1794793322, "sent": 2, "removed": 0}
+
+== DynamoDB ==
+{
+    "driverId": "DRV-EV",
+    "orderId": "ORD-EV-1",
+    "ts": "1794793322",
+    "lat": "1.2176",
+    "lng": "-77.2901",
+    "geohash": "d21ncjxj4",
+    "updatedAt": "2026-11-16T01:42:52.918412+00:00"
+}

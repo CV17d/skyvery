@@ -198,7 +198,7 @@ for connection_id in subscribers(item["orderId"]):
 - Tamaño máximo de mensaje: 128 KB (tramas de 32 KB). Nuestro mensaje pesa ~150 bytes.
 
 ### 5.4 Evidencia
-`docs/evidencias/03-websocket-connect-disconnect.txt` (rechazo sin `orderId`, 2 conexiones en el GSI, borrado al desconectar) y `05-broadcast-y-ts-viejo.txt` (cliente de `ORD-PASTO-1` recibe, cliente de `ORD-PASTO-2` recibe 0).
+`docs/evidencias/14-websocket-connect-disconnect.txt` (rechazo sin `orderId`, 2 conexiones en el GSI, borrado al desconectar) y `01-broadcast-selectivo.png` (cliente de `ORD-PASTO-1` recibe, cliente de `ORD-PASTO-2` recibe 0).
 
 ---
 
@@ -230,7 +230,7 @@ except ClientError as e:
 - "Silenciosamente": responde **200** (no 4xx/5xx), no lanza excepción, no hace broadcast. Lo registramos en CloudWatch como `{"status": "ignored", "reason": "stale"}` para poder demostrarlo.
 
 ### 6.3 Evidencia
-`05-broadcast-y-ts-viejo.txt`: el simulador (`--stale-after 3`) envía un `ts` 60 s más viejo; CloudWatch muestra `ignored/stale`; el cliente no lo recibe; el ítem de DynamoDB conserva el `ts` más nuevo.
+`03-conditional-write.png`: el simulador (`--stale-after 3`) envía un `ts` 60 s más viejo; CloudWatch muestra `ignored/stale`; el cliente no lo recibe; el ítem de DynamoDB conserva el `ts` más nuevo.
 
 ---
 
@@ -269,7 +269,7 @@ ddb.transact_write_items(TransactItems=[
 ### 7.3 Qué pasa si algo falla
 - DynamoDB lanza **`TransactionCanceledException`** con **`CancellationReasons`** (una por operación, en orden). Ejemplo real: `["None", "None", "ConditionalCheckFailed"]` = falló la 3.ª (repartidor inexistente).
 - **Ninguna** de las tres escrituras se aplica (todo o nada). La API responde **409 Conflict** con los motivos.
-- Evidencia `06-07-transaccion.txt`: caso fallido (409, orden sigue `IN_TRANSIT`, historial vacío), caso exitoso (las tres cosas cambiaron), y repetición (409, contador sigue en 1).
+- Evidencia `04-transaccion-exitosa.png` y `05-transaccion-fallida.png`: caso fallido (409, orden sigue `IN_TRANSIT`, historial vacío), caso exitoso (las tres cosas cambiaron), y repetición (409, contador sigue en 1).
 
 ### 7.4 Propiedades de las transacciones de DynamoDB (para preguntas)
 - **ACID** dentro de la transacción; aisladas de otras escrituras.
@@ -318,7 +318,7 @@ error_page 429 @limite;   # responde JSON {"error": "Demasiadas peticiones..."} 
 ### 8.4 La prueba de carga y el resultado
 - `loadtest/carga.py`: envía peticiones a **ritmo constante** (50 req/s durante 10 s = 500) con hilos, y cuenta los códigos.
 - **Esperado:** aceptadas ≈ burst + rate × tiempo = 20 + 10 × 10 = **120**; el resto 429.
-- **Obtenido (real, contra el ALB):** **119 × 200 y 381 × 429**. Logs: 381 líneas `429 … limit=REJECTED` en `access.log` y `limiting requests, excess: 20.x by zone "perip"` en `error.log` (evidencias `11-carga-resumen.txt` y `12-nginx-429.txt`).
+- **Obtenido (real, contra el ALB):** **119 × 200 y 381 × 429**. Logs: 381 líneas `429 … limit=REJECTED` en `access.log` y `limiting requests, excess: 20.x by zone "perip"` en `error.log` (evidencias `06-prueba-de-carga.png` y `07-nginx-logs-429.png`).
 - La diferencia de 1 se debe a la discretización del tiempo (el primer instante y el redondeo del "balde").
 
 ### 8.5 EC2, ALB y target group (`infra/ec2-alb.yaml`)
@@ -352,7 +352,7 @@ error_page 429 @limite;   # responde JSON {"error": "Demasiadas peticiones..."} 
 - **Limitación (pregunta frecuente):** un punto cerca del **borde** de la celda puede tener vecinos en la celda contigua. Solución estándar: consultar la celda y sus **8 vecinas**. Para la demo, una celda basta.
 - Implementado **sin librerías externas** (`geohash_encode` en `location_update`).
 
-Evidencia: `09-gsi-zona.txt`.
+Evidencia: `15-gsi-zona.txt`.
 
 ---
 
@@ -431,7 +431,7 @@ Evidencia: `09-gsi-zona.txt`.
 Las pruebas encontraron un error real: la API devolvía números de DynamoDB (`Decimal`) como texto (`"0"`); se corrigió con un serializador JSON.
 
 ### 14.2 Evidencias contra AWS real (`docs/evidencias/`)
-`03` connect/disconnect · `05` broadcast filtrado + `ts` viejo (CloudWatch + DynamoDB) · `06-07` transacción (3 casos) · `09` GSI por zona y por geohash · `11` resumen de carga · `12` logs NGINX con 429.
+`01` broadcast selectivo · `02` tabla de suscripciones · `03` conditional write (CloudWatch + DynamoDB) · `04`–`05` transacción · `06` prueba de carga · `07` logs NGINX con 429 · `08` rutas del WebSocket · `09` GSI · `10` endpoints · `11`–`13` capturas del mapa y del panel · `14` connect/disconnect · `15` GSI por zona y geohash.
 
 ---
 
@@ -566,8 +566,8 @@ Las pruebas encontraron un error real: la API devolvía números de DynamoDB (`D
 | WebSocket | `wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod` |
 | API REST | `https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod` |
 | Seguimiento (S3) | `http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com/index.html?orderId=…` |
-| Panel (ALB) | `http://skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com/` |
-| EC2 | `i-07196cd4fb4c12158` |
+| Panel (ALB) | `http://skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com/` |
+| EC2 | `i-061752495acdaa0da` |
 
 ```bash
 # Pruebas locales
@@ -583,7 +583,7 @@ curl https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod/zones/centro/or
 curl https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod/areas/d21nc/drivers
 
 # Prueba de carga
-python loadtest/carga.py http://skyvery-ops-alb-996397180.us-east-1.elb.amazonaws.com/ --rps 50 --segundos 10
+python loadtest/carga.py http://skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com/ --rps 50 --segundos 10
 
 # Borrar todo
 aws cloudformation delete-stack --profile skyvery --stack-name skyvery-ops

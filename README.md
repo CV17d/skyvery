@@ -133,7 +133,7 @@ sam delete --profile skyvery --stack-name skyvery-prod --no-prompts
 
 ## 8. Requisitos y evidencias
 
-Capturas tomadas contra el stack real (carpeta `docs/evidencias/`). Las imágenes `01`–`10` se generaron a partir de la salida real de cada comando; `11`–`13` son capturas del navegador.
+Evidencias tomadas contra el stack real (carpeta `docs/evidencias/`).
 
 | Requisito del enunciado | Cómo se cumple | Evidencia |
 |---|---|---|

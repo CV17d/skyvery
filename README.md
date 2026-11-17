@@ -100,13 +100,13 @@ python -m pytest -q tests
 | WebSocket (`WebSocketUrl`) | `wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod` |
 | API REST (`OrdersApiUrl`) | `https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod` |
 | Página de seguimiento (S3) | `http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com/index.html?orderId=<orden>` |
-| Panel de operaciones (ALB → EC2 NGINX) | `http://skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com/` |
+| Panel de operaciones (ALB → EC2 NGINX) | `http://skyvery-ops-alb-1544769596.us-east-1.elb.amazonaws.com/` |
 | Tema SNS | `skyvery-delivery-completed-prod` (correo confirmado) |
 | Stacks | `skyvery-prod` (SAM) y `skyvery-ops` (EC2 + ALB) |
 
 Solo Cristian opera AWS (perfil `skyvery`). La EC2 no tiene SSH: se administra con SSM (Session Manager).
 
-**Guion de la demo:** [`docs/demo.md`](docs/demo.md) · **Guía de estudio:** [`docs/guia-estudio.md`](docs/guia-estudio.md)
+**Guion de la demo:** [`docs/demo.md`](docs/demo.md) · **Recursos en la consola de AWS:** [`docs/consola-aws.md`](docs/consola-aws.md) · **Guía de estudio:** [`docs/guia-estudio.md`](docs/guia-estudio.md)
 
 **Al terminar la presentación, borrar todo** (la EC2 y el ALB cobran por hora; ver `docs/demo.md`):
 ```bash

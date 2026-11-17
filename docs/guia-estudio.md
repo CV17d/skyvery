@@ -566,8 +566,8 @@ Las pruebas encontraron un error real: la API devolvía números de DynamoDB (`D
 | WebSocket | `wss://3aeuxt4nid.execute-api.us-east-1.amazonaws.com/prod` |
 | API REST | `https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod` |
 | Seguimiento (S3) | `http://skyvery-frontend-485530831247-prod.s3-website-us-east-1.amazonaws.com/index.html?orderId=…` |
-| Panel (ALB) | `http://skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com/` |
-| EC2 | `i-061752495acdaa0da` |
+| Panel (ALB) | `http://skyvery-ops-alb-1544769596.us-east-1.elb.amazonaws.com/` |
+| EC2 | `i-0aac583a57e796cea` |
 
 ```bash
 # Pruebas locales
@@ -583,7 +583,7 @@ curl https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod/zones/centro/or
 curl https://qhbyd6ixm7.execute-api.us-east-1.amazonaws.com/prod/areas/d21nc/drivers
 
 # Prueba de carga
-python loadtest/carga.py http://skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com/ --rps 50 --segundos 10
+python loadtest/carga.py http://skyvery-ops-alb-1544769596.us-east-1.elb.amazonaws.com/ --rps 50 --segundos 10
 
 # Borrar todo
 aws cloudformation delete-stack --profile skyvery --stack-name skyvery-ops

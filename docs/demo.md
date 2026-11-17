@@ -9,7 +9,7 @@ Duración sugerida: 12–15 minutos. Cada paso dice **qué se muestra**, **cómo
    aws cloudformation describe-stacks --profile skyvery --query "Stacks[?starts_with(StackName,'skyvery')].[StackName,StackStatus]" --output table
    ```
 2. Abrir en pestañas:
-   - Panel de operaciones (ALB → EC2): http://skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com/
+   - Panel de operaciones (ALB → EC2): http://skyvery-ops-alb-1544769596.us-east-1.elb.amazonaws.com/
    - Consola AWS: CloudFormation, API Gateway (`skyvery-ws-prod`), DynamoDB, CloudWatch Logs, EC2 → Target groups.
    - Gmail (cj29772@gmail.com).
 3. Abrir **tres terminales** en la carpeta del repo y definir la URL del WebSocket (PowerShell):
@@ -89,12 +89,12 @@ En el panel (servido por NGINX en EC2 a través del ALB):
 1. EC2 → Target groups → `skyvery-ops-tg` → target **healthy** (health check `/health`).
 2. Prueba de carga (50 req/s durante 10 s):
    ```powershell
-   python loadtest/carga.py http://skyvery-ops-alb-457376824.us-east-1.elb.amazonaws.com/ --rps 50 --segundos 10
+   python loadtest/carga.py http://skyvery-ops-alb-1544769596.us-east-1.elb.amazonaws.com/ --rps 50 --segundos 10
    ```
    Resultado esperado ≈ 120 respuestas 200 (burst 20 + 10/s × 10 s) y el resto **429**.
 3. Logs de NGINX (sin SSH, con SSM):
    ```powershell
-   aws ssm start-session --profile skyvery --target i-061752495acdaa0da
+   aws ssm start-session --profile skyvery --target i-0aac583a57e796cea
    sudo grep " 429 " /var/log/nginx/access.log | tail
    sudo grep limiting /var/log/nginx/error.log | tail -3
    ```
